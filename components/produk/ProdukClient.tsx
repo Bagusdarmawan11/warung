@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Search, Printer, Edit2, Trash2, Barcode as BarcodeIcon, Boxes, Plus } from 'lucide-react';
+import { Search, Printer, Edit2, Trash2, Barcode as BarcodeIcon, Boxes, Plus, UploadCloud } from 'lucide-react';
 import { Card, Input, Chip, Badge, Button, EmptyState } from '@/components/ui';
 import { ConfirmDialog } from '@/components/Modal';
 import { PrintLabelSheet, type PrintItem } from '@/components/PrintLabelSheet';
@@ -70,9 +70,14 @@ export function ProdukClient({ initialProducts }: { initialProducts: ProductStoc
           <h1 className="font-display text-2xl font-extrabold text-ink">Daftar Barang</h1>
           <p className="text-sm text-ink-soft">{products.length} produk terdaftar</p>
         </div>
-        <Link href="/barang-masuk">
-          <Button variant="dark" size="sm"><Plus size={15} /> Produk Baru</Button>
-        </Link>
+        <div className="flex flex-none gap-2">
+          <Link href="/import">
+            <Button variant="ghost" size="sm"><UploadCloud size={15} /> Import CSV</Button>
+          </Link>
+          <Link href="/barang-masuk">
+            <Button variant="dark" size="sm"><Plus size={15} /> Produk Baru</Button>
+          </Link>
+        </div>
       </div>
 
       <div className="mb-3 flex gap-2">

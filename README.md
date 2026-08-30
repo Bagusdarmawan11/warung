@@ -99,7 +99,7 @@ npm install
 3. Tunggu ± 2 menit sampai project selesai dibuat.
 4. Di sidebar kiri, klik **SQL Editor** → **New query**.
 5. Buka file `supabase/migrations/0001_init.sql` di project ini, **copy semua isinya**, paste ke SQL Editor, klik **Run**. Tunggu sampai sukses (tulisan hijau "Success").
-6. Ulangi langkah yang sama untuk **`0002_functions.sql`**, lalu **`0003_checkout.sql`**, lalu **`0004_security_hardening.sql`** — **urutannya harus persis seperti ini** (0001 → 0002 → 0003 → 0004), karena tiap file bergantung pada file sebelumnya.
+6. Ulangi langkah yang sama untuk **`0002_functions.sql`**, lalu **`0003_checkout.sql`**, lalu **`0004_security_hardening.sql`**, lalu **`0005_bulk_import.sql`** — **urutannya harus persis seperti ini** (0001 → 0002 → 0003 → 0004 → 0005), karena tiap file bergantung pada file sebelumnya.
 
    > ⚠️ **Jangan lewati file `0004_security_hardening.sql`.** File ini menutup celah keamanan penting (tanpa file ini, siapa pun yang tahu URL Supabase-mu bisa memanggil fungsi checkout/tambah produk tanpa login). Lihat bagian [Keamanan](#keamanan).
 
@@ -145,15 +145,19 @@ npm run dev
 
 Buka [http://localhost:3000](http://localhost:3000) di browser → akan diarahkan ke halaman login → masuk pakai email/password dari Langkah 3.
 
-### Langkah 6 — (Opsional) Import data lama
+### Langkah 6 — Import data lama (opsional)
 
-Kalau kamu sebelumnya sudah mencatat data barang masuk & penjualan di Excel/CSV, kamu bisa mengimpornya sekali di awal:
+Ada 2 cara, pakai salah satu saja:
 
+**Cara A — lewat browser (paling mudah, tidak perlu komputer/terminal):**
+Buka aplikasi yang sudah di-deploy → menu **Produk** → tombol **"Import CSV"** (atau langsung ke halaman `/import`). Upload file CSV Barang Masuk (wajib) dan Penjualan (opsional), klik **Mulai Import**. Semua diproses langsung lewat browser, cocok dipakai walau kamu deploy langsung dari GitHub tanpa pernah menjalankan apa pun di komputer lokal.
+
+**Cara B — lewat terminal (kalau kamu sudah setup project di komputer lokal):**
 ```bash
 node --env-file=.env.local scripts/import-legacy-csv.mjs path/ke/barang-masuk.csv path/ke/penjualan.csv
 ```
 
-Baca catatan di bagian atas file `scripts/import-legacy-csv.mjs` — semua produk hasil import dibuat sebagai satuan **pcs**. Produk timbangan (telur, kemiri, lada, dll) sebaiknya kamu tambahkan ulang manual lewat menu **Barang Masuk → Produk Baru** dengan jenis satuan **gram**, supaya fitur harga-per-gram-nya aktif dengan benar.
+Kedua cara menghasilkan hasil yang sama. Catatan penting untuk keduanya: semua produk hasil import dibuat sebagai satuan **pcs**, dan produk yang namanya sudah ada di sistem otomatis dilewati (tidak dibuat dobel — aman kalau kamu tidak sengaja import 2 kali). Produk timbangan (telur, kemiri, lada, dll) sebaiknya kamu tambahkan ulang manual lewat menu **Barang Masuk → Produk Baru** dengan jenis satuan **gram**, supaya fitur harga-per-gram-nya aktif dengan benar.
 
 ---
 
@@ -209,6 +213,7 @@ git push -u origin main
 
 ### Produk (Daftar Barang)
 - Cari & filter produk, cetak ulang label (satuan / massal dengan centang banyak produk), edit info dasar, **koreksi stok manual** (untuk stok opname), dan lihat riwayat batch/harga tiap produk.
+- Tombol **Import CSV** di halaman ini membuka halaman import data lama (lihat [Langkah 6](#panduan-instalasi-lengkap) di atas) — bisa dipakai kapan saja, tidak cuma sekali di awal.
 
 ### Riwayat
 - Lihat & filter riwayat barang masuk maupun penjualan per tanggal, export ke CSV untuk backup/laporan.
@@ -223,7 +228,7 @@ git push -u origin main
 
 - **Login wajib** untuk semua halaman & operasi data (diberlakukan lewat Next.js Middleware + Supabase Auth).
 - **Row Level Security** aktif di semua tabel — hanya role `authenticated` yang bisa baca/tulis.
-- Fungsi-fungsi database yang menangani transaksi (checkout, tambah produk, dst) memakai `SECURITY DEFINER` supaya bisa mengunci baris untuk mencegah race condition — makanya izin eksekusinya **dicabut dari publik** dan hanya diberi ke `authenticated` (lihat `0004_security_hardening.sql`). Ini sudah diuji langsung: role anonim dipastikan mendapat error *permission denied* saat mencoba memanggil fungsi-fungsi tsb, dan *insert* langsung ke tabel diblok RLS.
+- Fungsi-fungsi database yang menangani transaksi (checkout, tambah produk, import massal, dst) memakai `SECURITY DEFINER` supaya bisa mengunci baris untuk mencegah race condition — makanya izin eksekusinya **dicabut dari publik** dan hanya diberi ke `authenticated` (lihat `0004_security_hardening.sql` & `0005_bulk_import.sql`). Ini sudah diuji langsung: role anonim dipastikan mendapat error *permission denied* saat mencoba memanggil fungsi-fungsi tsb, dan *insert* langsung ke tabel diblok RLS.
 - `SUPABASE_SERVICE_ROLE_KEY` **hanya** dipakai script import lokal (`scripts/import-legacy-csv.mjs`), tidak pernah dikirim ke browser atau di-deploy ke Vercel.
 - Route API `/api/ai-insight` memeriksa ulang status login di sisi server (lapisan pertahanan kedua di luar middleware) sebelum memanggil API Anthropic, supaya API key-mu tidak bisa "dipinjam" orang lain lewat endpoint itu.
 - Input pencarian sudah di-escape sebelum masuk ke filter query database, untuk mencegah karakter tak terduga merusak/menyalahgunakan query pencarian.
@@ -249,8 +254,10 @@ psql -d warungtest -f supabase/migrations/0001_init.sql
 psql -d warungtest -f supabase/migrations/0002_functions.sql
 psql -d warungtest -f supabase/migrations/0003_checkout.sql
 psql -d warungtest -f supabase/migrations/0004_security_hardening.sql
+psql -d warungtest -f supabase/migrations/0005_bulk_import.sql
 psql -d warungtest -f supabase/test/01_test_anon_blocked.sql
 psql -d warungtest -f supabase/test/02_test_fifo_checkout.sql
+psql -d warungtest -f supabase/test/03_test_bulk_import.sql
 ```
 
 ---
