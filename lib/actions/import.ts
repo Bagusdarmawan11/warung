@@ -84,16 +84,31 @@ function readCsvAsObjects(text: string, skipRows: number): Record<string, string
 export interface ImportResult {
   ok: boolean;
   error?: string;
-  created?: number;
-  skipped?: { name: string; reason: string }[];
-  totalDiproses?: number;
+  // hasil import produk / barang masuk
+  productsCreated?: number;
+  productsSkipped?: { name: string; reason: string }[];
+  productsTotal?: number;
+  // hasil import riwayat penjualan
+  salesCreated?: number;
+  salesSkipped?: { name: string; reason: string }[];
+  salesTotal?: number;
+  salesAlreadyImported?: boolean;
 }
 
 /**
- * Format 1: format khusus template warung ini (kolom "Nama Barang"/"Nama
- * Produk", "Qty", "Harga Modal", "Harga Jual", dst, dengan 3 baris judul di
- * atas sebelum header). Semua produk dibuat sebagai satuan pcs — produk
- * timbangan sebaiknya ditambah ulang manual dengan satuan gram.
+ * Format khusus template warung ini (kolom "Nama Barang"/"Nama Produk",
+ * "Qty", "Harga Modal", "Harga Jual", dst, dengan 3 baris judul di atas
+ * sebelum header). Semua produk dibuat sebagai satuan pcs — produk timbangan
+ * sebaiknya ditambah ulang manual dengan satuan gram.
+ *
+ * Melakukan 2 hal:
+ * 1. Membuat produk + stok awal bersih (qty masuk dikurangi qty terjual)
+ *    lewat bulk_import_products.
+ * 2. Menyimpan SETIAP baris di file Penjualan sebagai riwayat transaksi asli
+ *    lewat bulk_import_sales_history, supaya muncul di menu Riwayat &
+ *    dihitung di Analitik (produk terlaris, tren, dst). Ini TIDAK mengubah
+ *    stok lagi (stok bersihnya sudah dihitung di langkah 1), jadi aman
+ *    dijalankan bersamaan tanpa membuat stok kepotong dobel.
  */
 export async function importLegacyCsv(masukCsvText: string, jualCsvText: string): Promise<ImportResult> {
   const supabase = await createClient();
@@ -102,12 +117,13 @@ export async function importLegacyCsv(masukCsvText: string, jualCsvText: string)
 
   try {
     const masukRows = readCsvAsObjects(masukCsvText, 3).filter((r) => cleanName(r['Nama Barang']));
-    const jualRows = jualCsvText ? readCsvAsObjects(jualCsvText, 3).filter((r) => cleanName(r['Nama Produk'])) : [];
+    const jualRows = jualCsvText.trim() ? readCsvAsObjects(jualCsvText, 3).filter((r) => cleanName(r['Nama Produk'])) : [];
 
     if (!masukRows.length) {
       return { ok: false, error: 'File Barang Masuk kosong atau formatnya tidak dikenali. Pastikan ini file CSV export dari template yang sama.' };
     }
 
+    // ---------- 1. Agregasi Barang Masuk -> daftar produk + stok awal ----------
     type Agg = { name: string; totalQty: number; buy: number; sell: number; expiry: string | null; receivedAt: string };
     const agg = new Map<string, Agg>();
     const order: string[] = [];
@@ -139,12 +155,12 @@ export async function importLegacyCsv(masukCsvText: string, jualCsvText: string)
       terjualPerProduk.set(name, (terjualPerProduk.get(name) || 0) + qty);
     }
 
-    const items: any[] = [];
+    const productItems: any[] = [];
     for (const name of order) {
       const a = agg.get(name)!;
       const terjual = terjualPerProduk.get(name) || 0;
       const stokAwal = Math.max(0, a.totalQty - terjual);
-      items.push({
+      productItems.push({
         name,
         unit_type: 'pcs',
         qty: stokAwal,
@@ -157,19 +173,55 @@ export async function importLegacyCsv(masukCsvText: string, jualCsvText: string)
     // Produk yang tercatat terjual tapi tidak pernah ada riwayat masuk di data lama
     for (const name of terjualPerProduk.keys()) {
       if (!agg.has(name)) {
-        items.push({ name, unit_type: 'pcs', qty: 0, buy_price: 0, sell_price: 0 });
+        productItems.push({ name, unit_type: 'pcs', qty: 0, buy_price: 0, sell_price: 0 });
       }
     }
 
-    const { data, error } = await supabase.rpc('bulk_import_products', { p_items: items });
-    if (error) return { ok: false, error: error.message };
+    const { data: productResult, error: productError } = await supabase.rpc('bulk_import_products', { p_items: productItems });
+    if (productError) return { ok: false, error: productError.message };
+
+    // ---------- 2. Import riwayat penjualan (baris asli, bukan agregat) ----------
+    let salesResult: { created?: number; skipped?: any[]; already_imported?: boolean } | null = null;
+    if (jualRows.length) {
+      const salesItems = jualRows
+        .map((r) => ({
+          product_name: cleanName(r['Nama Produk']),
+          qty: cleanQty(r['Qty']),
+          unit_price: cleanMoney(r['Harga Jual']) || 0,
+          unit_cost: cleanMoney(r['Harga Modal']) || 0,
+          buyer_name: cleanName(r['Nama Pembeli']),
+          sold_at: cleanDate(r['Tanggal Keluar']),
+        }))
+        .filter((it) => it.product_name && it.qty > 0);
+
+      if (salesItems.length) {
+        const { data, error } = await supabase.rpc('bulk_import_sales_history', { p_items: salesItems });
+        if (error) {
+          // Barang masuk sudah kepakai; jangan gagalkan seluruh proses hanya
+          // karena riwayat penjualan gagal - laporkan sebagai peringatan.
+          salesResult = { created: 0, skipped: [{ name: '-', reason: error.message }], already_imported: false };
+        } else {
+          salesResult = data;
+        }
+      }
+    }
 
     revalidatePath('/');
     revalidatePath('/produk');
     revalidatePath('/kasir');
     revalidatePath('/riwayat');
+    revalidatePath('/analitik');
 
-    return { ok: true, created: data.created, skipped: data.skipped, totalDiproses: items.length };
+    return {
+      ok: true,
+      productsCreated: productResult.created,
+      productsSkipped: productResult.skipped,
+      productsTotal: productItems.length,
+      salesCreated: salesResult?.created ?? 0,
+      salesSkipped: salesResult?.skipped ?? [],
+      salesTotal: jualRows.length,
+      salesAlreadyImported: salesResult?.already_imported ?? false,
+    };
   } catch (e: any) {
     return { ok: false, error: 'Gagal memproses file: ' + (e?.message || 'error tidak diketahui') };
   }
