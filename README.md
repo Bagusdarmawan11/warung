@@ -239,6 +239,12 @@ git push -u origin main
 
 ---
 
+## Reset Data (Opsional)
+
+Kalau kamu perlu mulai dari nol lagi — misalnya setelah update logika import dan mau re-import ulang 2 file CSV supaya nama pembeli & urutan waktunya ikut ter-perbaiki — jalankan **`supabase/scripts/reset_data.sql`** di Supabase SQL Editor. Script ini menghapus **semua** data produk/stok/riwayat (baca peringatan di dalam filenya dulu), lalu mengembalikan penomoran kode produk ke `BR0001` lagi. Setelah itu tinggal import ulang seperti biasa lewat halaman `/import`.
+
+---
+
 ## Keamanan
 
 - **Login wajib** untuk semua halaman & operasi data (diberlakukan lewat Next.js Middleware + Supabase Auth).

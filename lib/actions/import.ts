@@ -140,24 +140,29 @@ export async function importLegacyCsv(masukCsvText: string, jualCsvText: string)
 
     // ---------- 1. Agregasi Barang Masuk -> daftar produk + stok awal ----------
     // Produk dipertahankan dalam urutan KEMUNCULAN PERTAMA di file (dipakai
-    // untuk menyusun waktu sintetis di bawah).
+    // untuk menyusun waktu sintetis di bawah). Pencocokan nama produk memakai
+    // huruf kecil semua (case-insensitive) supaya "Telur Ayam 500 gram" dan
+    // "Telur Ayam 500 Gram" dianggap produk yang SAMA (bukan 2 produk beda
+    // cuma gara-gara beda huruf besar/kecil) — nama yang dipakai untuk
+    // ditampilkan adalah nama dari kemunculan PERTAMA di file.
     type Agg = { name: string; totalQty: number; buy: number; sell: number; expiry: string | null; receivedAt: string };
     const agg = new Map<string, Agg>();
     const order: string[] = [];
 
     for (const r of masukRows) {
       const name = cleanName(r['Nama Barang'])!;
+      const key = name.toLowerCase();
       const qty = cleanQty(r['Qty']);
       const buy = cleanMoney(r['Harga Modal']);
       const sell = cleanMoney(r['Harga Jual']);
       const expiry = cleanDate(r['Tanggal Expired']);
       const receivedAt = cleanDate(r['Tanggal Masuk']) || new Date().toISOString().slice(0, 10);
 
-      if (!agg.has(name)) {
-        agg.set(name, { name, totalQty: 0, buy: 0, sell: 0, expiry: null, receivedAt });
-        order.push(name);
+      if (!agg.has(key)) {
+        agg.set(key, { name, totalQty: 0, buy: 0, sell: 0, expiry: null, receivedAt });
+        order.push(key);
       }
-      const a = agg.get(name)!;
+      const a = agg.get(key)!;
       a.totalQty += qty;
       if (buy != null) a.buy = buy;
       if (sell != null) a.sell = sell;
@@ -165,24 +170,29 @@ export async function importLegacyCsv(masukCsvText: string, jualCsvText: string)
       if (receivedAt) a.receivedAt = receivedAt;
     }
 
-    const terjualPerProduk = new Map<string, number>();
+    // Pencocokan produk terjual juga case-insensitive (huruf besar/kecil
+    // diabaikan) supaya nyambung dengan agregasi Barang Masuk di atas.
+    const terjualPerProduk = new Map<string, number>(); // key = nama huruf kecil
+    const terjualDisplayName = new Map<string, string>(); // key -> nama tampilan (kemunculan pertama)
     for (const r of jualRows) {
       const name = cleanName(r['Nama Produk'])!;
+      const key = name.toLowerCase();
       const qty = cleanQty(r['Qty']);
-      terjualPerProduk.set(name, (terjualPerProduk.get(name) || 0) + qty);
+      terjualPerProduk.set(key, (terjualPerProduk.get(key) || 0) + qty);
+      if (!terjualDisplayName.has(key)) terjualDisplayName.set(key, name);
     }
 
     // Barang masuk diberi jam mulai 07:00 (pagi) supaya kalau tanggalnya sama
     // dengan penjualan, barang masuk tetap terurut lebih dulu secara logis.
-    const productDateKeys = order.map((name) => agg.get(name)!.receivedAt);
+    const productDateKeys = order.map((key) => agg.get(key)!.receivedAt);
     const productTimes = assignSyntheticTimes(productDateKeys, 7);
 
-    const productItems: any[] = order.map((name, i) => {
-      const a = agg.get(name)!;
-      const terjual = terjualPerProduk.get(name) || 0;
+    const productItems: any[] = order.map((key, i) => {
+      const a = agg.get(key)!;
+      const terjual = terjualPerProduk.get(key) || 0;
       const stokAwal = Math.max(0, a.totalQty - terjual);
       return {
-        name,
+        name: a.name,
         unit_type: 'pcs',
         qty: stokAwal,
         buy_price: a.buy || 0,
@@ -192,9 +202,9 @@ export async function importLegacyCsv(masukCsvText: string, jualCsvText: string)
       };
     });
     // Produk yang tercatat terjual tapi tidak pernah ada riwayat masuk di data lama
-    for (const name of terjualPerProduk.keys()) {
-      if (!agg.has(name)) {
-        productItems.push({ name, unit_type: 'pcs', qty: 0, buy_price: 0, sell_price: 0 });
+    for (const key of terjualPerProduk.keys()) {
+      if (!agg.has(key)) {
+        productItems.push({ name: terjualDisplayName.get(key), unit_type: 'pcs', qty: 0, buy_price: 0, sell_price: 0 });
       }
     }
 
