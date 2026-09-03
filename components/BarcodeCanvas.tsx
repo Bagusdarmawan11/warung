@@ -6,8 +6,8 @@ import JsBarcode from 'jsbarcode';
 export function BarcodeCanvas({
   code,
   className,
-  width = 2,
-  height = 46,
+  width = 1.3,
+  height = 30,
 }: {
   code: string;
   className?: string;
@@ -24,8 +24,8 @@ export function BarcodeCanvas({
         width,
         height,
         displayValue: true,
-        fontSize: 13,
-        margin: 8,
+        fontSize: 10,
+        margin: 6,
         background: '#ffffff',
         lineColor: '#2E2A3D',
       });

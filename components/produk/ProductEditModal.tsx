@@ -1,36 +1,56 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Save, PlusCircle, MinusCircle, Layers } from 'lucide-react';
-import { Modal } from '@/components/Modal';
-import { Button, Field, Input, Badge } from '@/components/ui';
-import { getBatchesForProduct, updateProduct, updateBatchPrice, adjustStock } from '@/lib/actions/products';
-import { rupiah, formatTanggal, formatQty } from '@/lib/format';
+import { Save, PlusCircle, MinusCircle, Layers, ImagePlus, Printer, Trash2, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
+import { Modal, ConfirmDialog } from '@/components/Modal';
+import { Button, Field, Input, Badge, ToggleGroup } from '@/components/ui';
+import { getBatchesForProduct, updateProduct, updateBatchPrice, adjustStock, getProductMovements, deleteProduct, type ProductMovement } from '@/lib/actions/products';
+import { uploadProductImage } from '@/lib/uploadImage';
+import { rupiah, formatTanggal, formatTanggalWaktu, formatQty } from '@/lib/format';
+import { PrintLabelSheet, type PrintItem } from '@/components/PrintLabelSheet';
 import type { ProductBatch, ProductStockSummary } from '@/lib/types';
 
 export function ProductEditModal({
   product,
   onClose,
   onSaved,
+  onDeleted,
 }: {
   product: ProductStockSummary | null;
   onClose: () => void;
   onSaved: () => void;
+  onDeleted: () => void;
 }) {
+  const [tab, setTab] = useState<'info' | 'riwayat'>('info');
   const [batches, setBatches] = useState<ProductBatch[]>([]);
+  const [movements, setMovements] = useState<ProductMovement[] | null>(null);
   const [loadingBatches, setLoadingBatches] = useState(false);
+  const [loadingMovements, setLoadingMovements] = useState(false);
   const [saving, setSaving] = useState(false);
   const [adjustDelta, setAdjustDelta] = useState('');
   const [adjustNote, setAdjustNote] = useState('');
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [printQueue, setPrintQueue] = useState<PrintItem[] | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!product) return;
+    setTab('info');
+    setImagePreview(product.image_url);
     setLoadingBatches(true);
-    getBatchesForProduct(product.product_id)
-      .then(setBatches)
-      .finally(() => setLoadingBatches(false));
+    getBatchesForProduct(product.product_id).then(setBatches).finally(() => setLoadingBatches(false));
+    setMovements(null);
   }, [product]);
+
+  useEffect(() => {
+    if (tab === 'riwayat' && product && movements === null) {
+      setLoadingMovements(true);
+      getProductMovements(product.product_id).then(setMovements).finally(() => setLoadingMovements(false));
+    }
+  }, [tab, product, movements]);
 
   if (!product) return null;
 
@@ -48,6 +68,20 @@ export function ProductEditModal({
     if (!res.ok) { toast.error(res.error); return; }
     toast.success('Perubahan disimpan');
     onSaved();
+  }
+
+  async function handleImagePick(file: File | null) {
+    if (!file || !product) return;
+    setUploadingImage(true);
+    const res = await uploadProductImage(file, product.product_id);
+    setUploadingImage(false);
+    if (res.url) {
+      setImagePreview(res.url);
+      toast.success('Foto produk diperbarui');
+      onSaved();
+    } else if (res.error) {
+      toast.error(res.error);
+    }
   }
 
   async function handleBatchPriceSave(batch: ProductBatch, buy: number, sell: number, expiry: string) {
@@ -69,57 +103,144 @@ export function ProductEditModal({
     setAdjustNote('');
     const fresh = await getBatchesForProduct(product!.product_id);
     setBatches(fresh);
+    setMovements(null);
     onSaved();
   }
 
+  async function handleDelete() {
+    const res = await deleteProduct(product!.product_id);
+    if (!res.ok) { toast.error(res.error); return; }
+    toast.success(res.data.archived ? 'Produk diarsipkan (punya riwayat transaksi lama)' : 'Produk dihapus');
+    setConfirmDelete(false);
+    onDeleted();
+  }
+
   return (
-    <Modal open={!!product} onClose={onClose} title="Edit Produk">
-      <p className="mb-4 -mt-2 font-mono text-xs text-ink-soft">{product.code} &middot; {product.unit_type === 'gram' ? 'Timbangan (gram)' : 'Satuan (pcs)'}</p>
-
-      <form onSubmit={handleSubmit} className="mb-5 grid grid-cols-1 gap-x-4 sm:grid-cols-2">
-        <Field label="Nama Barang *" full>
-          <Input name="name" required defaultValue={product.name} />
-        </Field>
-        <Field label="Kategori">
-          <Input name="category" defaultValue={product.category || ''} />
-        </Field>
-        <Field label="Batas Stok Menipis">
-          <Input name="threshold" type="number" step="any" defaultValue={product.low_stock_threshold} />
-        </Field>
-        <div className="sm:col-span-2">
-          <Button type="submit" full disabled={saving}>
-            <Save size={16} /> {saving ? 'Menyimpan...' : 'Simpan Perubahan'}
-          </Button>
-        </div>
-      </form>
-
-      <div className="mb-5 rounded-2xl bg-lilac-50 p-3.5">
-        <p className="mb-2 text-xs font-bold text-ink-soft">Koreksi Stok Manual (stok opname)</p>
-        <div className="mb-2 flex gap-2">
-          <Input placeholder={`Jumlah (${product.unit_type})`} type="number" value={adjustDelta} onChange={(e) => setAdjustDelta(e.target.value)} />
-        </div>
-        <Input placeholder="Catatan (opsional)" value={adjustNote} onChange={(e) => setAdjustNote(e.target.value)} className="mb-2" />
-        <div className="flex gap-2">
-          <Button variant="secondary" size="sm" full onClick={() => handleAdjust(1)}><PlusCircle size={14} /> Tambah</Button>
-          <Button variant="danger" size="sm" full onClick={() => handleAdjust(-1)}><MinusCircle size={14} /> Kurangi</Button>
+    <Modal open={!!product} onClose={onClose} title="Detail Produk">
+      <div className="mb-4 flex items-center gap-3">
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="relative flex h-16 w-16 flex-none items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-lilac-200 bg-lilac-50/50 text-ink-soft"
+        >
+          {imagePreview ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={imagePreview} alt={product.name} className="h-full w-full object-cover" />
+          ) : (
+            <ImagePlus size={20} />
+          )}
+          {uploadingImage && <div className="absolute inset-0 flex items-center justify-center bg-white/70 text-[9px] font-bold">...</div>}
+        </button>
+        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleImagePick(e.target.files?.[0] || null)} />
+        <div className="min-w-0">
+          <p className="font-mono text-xs text-ink-soft">{product.code} &middot; {product.unit_type === 'gram' ? 'Timbangan (gram)' : 'Satuan (pcs)'}</p>
+          <p className="truncate font-display text-lg font-bold text-ink">{product.name}</p>
         </div>
       </div>
 
-      <div>
-        <p className="mb-2 flex items-center gap-1.5 text-xs font-bold text-ink-soft"><Layers size={14} /> Riwayat Batch (FIFO — batch paling atas dipakai duluan)</p>
-        {loadingBatches ? (
-          <p className="text-xs text-ink-soft">Memuat...</p>
-        ) : batches.length === 0 ? (
-          <p className="text-xs text-ink-soft">Belum ada batch.</p>
-        ) : (
-          <div className="space-y-2">
-            {batches.map((b) => (
-              <BatchRow key={b.id} batch={b} unitType={product.unit_type} onSave={handleBatchPriceSave} />
-            ))}
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <ToggleGroup value={tab} onChange={(v) => setTab(v as any)} options={[{ value: 'info', label: 'Info & Stok' }, { value: 'riwayat', label: 'Riwayat Transaksi' }]} />
+        <button onClick={() => setPrintQueue([{ code: product.code, name: product.name, price: product.harga_jual_aktif || 0 }])} className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-lilac-100 text-ink-soft hover:bg-lilac-200" title="Cetak barcode">
+          <Printer size={15} />
+        </button>
+      </div>
+
+      {tab === 'info' ? (
+        <>
+          <form onSubmit={handleSubmit} className="mb-5 grid grid-cols-1 gap-x-4 sm:grid-cols-2">
+            <Field label="Nama Barang *" full>
+              <Input name="name" required defaultValue={product.name} />
+            </Field>
+            <Field label="Kategori">
+              <Input name="category" defaultValue={product.category || ''} />
+            </Field>
+            <Field label="Batas Stok Menipis">
+              <Input name="threshold" type="number" step="any" defaultValue={product.low_stock_threshold} />
+            </Field>
+            <div className="sm:col-span-2">
+              <Button type="submit" full disabled={saving}>
+                <Save size={16} /> {saving ? 'Menyimpan...' : 'Simpan Perubahan'}
+              </Button>
+            </div>
+          </form>
+
+          <div className="mb-5 rounded-2xl bg-lilac-50 p-3.5">
+            <p className="mb-2 text-xs font-bold text-ink-soft">Koreksi Stok Manual (stok opname)</p>
+            <div className="mb-2 flex gap-2">
+              <Input placeholder={`Jumlah (${product.unit_type})`} type="number" value={adjustDelta} onChange={(e) => setAdjustDelta(e.target.value)} />
+            </div>
+            <Input placeholder="Catatan (opsional)" value={adjustNote} onChange={(e) => setAdjustNote(e.target.value)} className="mb-2" />
+            <div className="flex gap-2">
+              <Button variant="secondary" size="sm" full onClick={() => handleAdjust(1)}><PlusCircle size={14} /> Tambah</Button>
+              <Button variant="danger" size="sm" full onClick={() => handleAdjust(-1)}><MinusCircle size={14} /> Kurangi</Button>
+            </div>
           </div>
-        )}
-      </div>
+
+          <div className="mb-5">
+            <p className="mb-2 flex items-center gap-1.5 text-xs font-bold text-ink-soft"><Layers size={14} /> Riwayat Batch (FIFO — batch paling atas dipakai duluan)</p>
+            {loadingBatches ? (
+              <p className="text-xs text-ink-soft">Memuat...</p>
+            ) : batches.length === 0 ? (
+              <p className="text-xs text-ink-soft">Belum ada batch.</p>
+            ) : (
+              <div className="space-y-2">
+                {batches.map((b) => (
+                  <BatchRow key={b.id} batch={b} unitType={product.unit_type} onSave={handleBatchPriceSave} />
+                ))}
+              </div>
+            )}
+          </div>
+
+          <button onClick={() => setConfirmDelete(true)} className="flex items-center gap-1.5 text-xs font-bold text-rose-500 hover:underline">
+            <Trash2 size={13} /> Hapus Produk Ini
+          </button>
+        </>
+      ) : (
+        <MovementList movements={movements} loading={loadingMovements} unitType={product.unit_type} />
+      )}
+
+      <PrintLabelSheet items={printQueue} onDone={() => setPrintQueue(null)} />
+      <ConfirmDialog
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        onConfirm={handleDelete}
+        title="Hapus Produk"
+        message={`Hapus "${product.name}" dari daftar barang? Kalau produk ini punya riwayat transaksi, produk akan diarsipkan (bukan dihapus total) supaya laporan lama tetap akurat.`}
+        danger
+      />
     </Modal>
+  );
+}
+
+function MovementList({ movements, loading, unitType }: { movements: ProductMovement[] | null; loading: boolean; unitType: 'pcs' | 'gram' }) {
+  if (loading || movements === null) return <p className="py-6 text-center text-xs text-ink-soft">Memuat riwayat...</p>;
+  if (movements.length === 0) return <p className="py-6 text-center text-xs text-ink-soft">Belum ada riwayat transaksi untuk produk ini.</p>;
+
+  return (
+    <div className="max-h-[50vh] space-y-2 overflow-y-auto">
+      {movements.map((m) => (
+        <div key={m.id} className="flex items-center gap-3 rounded-xl border border-lilac-100 p-3">
+          <div className={`flex h-9 w-9 flex-none items-center justify-center rounded-full ${m.type === 'masuk' ? 'bg-mint-100 text-mint-600' : 'bg-peach-100 text-peach-500'}`}>
+            {m.type === 'masuk' ? <ArrowDownCircle size={16} /> : <ArrowUpCircle size={16} />}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold text-ink">{m.type === 'masuk' ? 'Barang Masuk' : 'Terjual'}</span>
+              <Badge tone={m.type === 'masuk' ? 'good' : 'info'}>{formatQty(m.qty, unitType)}</Badge>
+            </div>
+            <p className="text-[11px] text-ink-soft">
+              {formatTanggalWaktu(m.date)}
+              {m.type === 'keluar' && m.buyerName ? ` · Pembeli: ${m.buyerName}` : ''}
+            </p>
+          </div>
+          <div className="flex-none text-right">
+            <p className="font-mono text-xs font-bold text-ink">{rupiah(m.unitPrice)}</p>
+            {m.type === 'keluar' && m.unitCost != null && (
+              <p className="font-mono text-[10px] text-mint-600">+{rupiah((m.unitPrice || 0) - m.unitCost)}</p>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 

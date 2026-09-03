@@ -2,16 +2,15 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutGrid, ScanLine, PackagePlus, Boxes, History, Sparkles, LogOut } from 'lucide-react';
+import { LayoutGrid, ScanLine, PackagePlus, Boxes, History, LogOut } from 'lucide-react';
 import { signOut } from '@/lib/actions/auth';
 
 const NAV_ITEMS = [
-  { href: '/', label: 'Ringkasan', icon: LayoutGrid },
+  { href: '/', label: 'Beranda', icon: LayoutGrid },
   { href: '/kasir', label: 'Kasir', icon: ScanLine },
   { href: '/barang-masuk', label: 'Barang Masuk', icon: PackagePlus },
   { href: '/produk', label: 'Produk', icon: Boxes },
   { href: '/riwayat', label: 'Riwayat', icon: History },
-  { href: '/analitik', label: 'Analitik', icon: Sparkles },
 ];
 
 export function TopNav({ namaWarung }: { namaWarung: string }) {

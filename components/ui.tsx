@@ -51,9 +51,14 @@ export function Button({
 // ---------------------------------------------------------------------------
 // Card
 // ---------------------------------------------------------------------------
-export function Card({ className, children, tight }: { className?: string; children: ReactNode; tight?: boolean }) {
+export function Card({
+  className,
+  children,
+  tight,
+  ...rest
+}: React.HTMLAttributes<HTMLDivElement> & { className?: string; children: ReactNode; tight?: boolean }) {
   return (
-    <div className={cn('bg-white rounded-xl3 border border-lilac-100 shadow-soft', tight ? 'p-3.5' : 'p-5', className)}>
+    <div className={cn('bg-white rounded-xl3 border border-lilac-100 shadow-soft', tight ? 'p-3.5' : 'p-5', className)} {...rest}>
       {children}
     </div>
   );

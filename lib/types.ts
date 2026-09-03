@@ -9,6 +9,7 @@ export interface Product {
   unit_type: UnitType;
   low_stock_threshold: number;
   is_active: boolean;
+  image_url: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -51,6 +52,7 @@ export interface SaleRow {
   total: number;
   buyer_name: string | null;
   sold_at: string;
+  batch?: { received_at: string } | null;
 }
 
 // Ringkasan stok gabungan (dari view product_stock_summary)
@@ -66,6 +68,7 @@ export interface ProductStockSummary {
   harga_jual_aktif: number | null;
   harga_modal_aktif: number | null;
   kadaluwarsa_terdekat: string | null;
+  image_url: string | null;
 }
 
 export interface CartItem {

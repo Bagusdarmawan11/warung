@@ -58,13 +58,13 @@ export interface HistoryRange {
 
 export async function getSalesHistory(range?: HistoryRange): Promise<SaleRow[]> {
   const supabase = await createClient();
-  let q = supabase.from('sales').select('*').order('sold_at', { ascending: false }).limit(2000);
+  let q = supabase.from('sales').select('*, batch:product_batches(received_at)').order('sold_at', { ascending: false }).limit(2000);
   if (range?.from) q = q.gte('sold_at', range.from);
   if (range?.to) q = q.lte('sold_at', range.to + 'T23:59:59');
   if (range?.search) q = q.ilike('product_name_snapshot', `%${range.search}%`);
   const { data, error } = await q;
   if (error) throw new Error(error.message);
-  return (data as SaleRow[]) || [];
+  return (data as any as SaleRow[]) || [];
 }
 
 export async function getStockInHistory(range?: HistoryRange): Promise<StockInHistoryRow[]> {
@@ -76,4 +76,11 @@ export async function getStockInHistory(range?: HistoryRange): Promise<StockInHi
   const { data, error } = await q;
   if (error) throw new Error(error.message);
   return (data as StockInHistoryRow[]) || [];
+}
+
+export async function getProductStockById(productId: string): Promise<number | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from('product_stock_summary').select('stok').eq('product_id', productId).maybeSingle();
+  if (error) throw new Error(error.message);
+  return data ? (data as any).stok : null;
 }

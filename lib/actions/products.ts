@@ -89,6 +89,48 @@ export async function getBatchesForProduct(productId: string): Promise<ProductBa
   return (data as ProductBatch[]) || [];
 }
 
+export interface ProductMovement {
+  id: string;
+  type: 'masuk' | 'keluar';
+  date: string;
+  qty: number;
+  unitPrice: number | null;
+  unitCost: number | null;
+  buyerName: string | null;
+}
+
+/** Riwayat pergerakan (masuk + keluar) untuk satu produk, digabung & diurutkan terbaru dulu. */
+export async function getProductMovements(productId: string): Promise<ProductMovement[]> {
+  const supabase = await createClient();
+  const [masukRes, keluarRes] = await Promise.all([
+    supabase.from('stock_in_history').select('*').eq('product_id', productId).order('created_at', { ascending: false }),
+    supabase.from('sales').select('*').eq('product_id', productId).order('sold_at', { ascending: false }),
+  ]);
+  if (masukRes.error) throw new Error(masukRes.error.message);
+  if (keluarRes.error) throw new Error(keluarRes.error.message);
+
+  const masuk: ProductMovement[] = (masukRes.data || []).map((m: any) => ({
+    id: 'in-' + m.id,
+    type: 'masuk',
+    date: m.received_at,
+    qty: m.qty,
+    unitPrice: m.sell_price,
+    unitCost: m.buy_price,
+    buyerName: null,
+  }));
+  const keluar: ProductMovement[] = (keluarRes.data || []).map((s: any) => ({
+    id: 'out-' + s.id,
+    type: 'keluar',
+    date: s.sold_at,
+    qty: s.qty,
+    unitPrice: s.unit_price,
+    unitCost: s.unit_cost,
+    buyerName: s.buyer_name,
+  }));
+
+  return [...masuk, ...keluar].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+}
+
 // ---------------------------------------------------------------------------
 // WRITE
 // ---------------------------------------------------------------------------

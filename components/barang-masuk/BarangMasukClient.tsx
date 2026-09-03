@@ -2,12 +2,13 @@
 
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { PackagePlus, Download, Printer, Plus, Search } from 'lucide-react';
+import { PackagePlus, Download, Printer, Plus, Search, ImagePlus, X } from 'lucide-react';
 import { Button, Card, Field, Input, Select, ToggleGroup } from '@/components/ui';
 import { BarcodeCanvas, downloadCanvasPng } from '@/components/BarcodeCanvas';
 import { PrintLabelSheet, type PrintItem } from '@/components/PrintLabelSheet';
 import { createProduct, addBatch } from '@/lib/actions/products';
 import { getProductSummaries } from '@/lib/actions/products';
+import { uploadProductImage } from '@/lib/uploadImage';
 import { rupiah, todayISO } from '@/lib/format';
 import type { Product, ProductStockSummary, UnitType } from '@/lib/types';
 
@@ -43,6 +44,16 @@ function ProdukBaruForm() {
   const [saving, setSaving] = useState(false);
   const [created, setCreated] = useState<Product | null>(null);
   const [printQueue, setPrintQueue] = useState<PrintItem[] | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  function handlePickImage(file: File | null) {
+    setImageFile(file);
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImagePreview(file ? URL.createObjectURL(file) : null);
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -68,8 +79,21 @@ function ProdukBaruForm() {
     setSaving(false);
 
     if (!res.ok) { toast.error(res.error); return; }
-    setCreated(res.data);
-    toast.success('Produk baru ditambahkan: ' + res.data.code);
+    let product = res.data;
+    toast.success('Produk baru ditambahkan: ' + product.code);
+
+    // Upload foto (opsional) - kalau gagal, produk tetap tersimpan, cuma kasih peringatan
+    if (imageFile) {
+      setUploadingImage(true);
+      const uploadRes = await uploadProductImage(imageFile, product.id);
+      setUploadingImage(false);
+      if (uploadRes.url) {
+        product = { ...product, image_url: uploadRes.url };
+      } else if (uploadRes.error) {
+        toast.error(uploadRes.error);
+      }
+    }
+    setCreated(product);
   }
 
   if (created) {
@@ -78,11 +102,15 @@ function ProdukBaruForm() {
         <span className="mb-3 inline-flex items-center gap-1 rounded-full bg-mint-100 px-3 py-1 text-xs font-bold text-mint-600">
           Produk tersimpan
         </span>
+        {created.image_url && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={created.image_url} alt={created.name} className="mx-auto mb-3 h-24 w-24 rounded-2xl object-cover" />
+        )}
         <h3 className="font-display text-xl font-bold text-ink">{created.name}</h3>
         <p className="mb-4 text-sm text-ink-soft">
           Kode <span className="font-mono font-bold text-ink">{created.code}</span>
         </p>
-        <div className="mx-auto max-w-[260px] rounded-2xl border-2 border-dashed border-lilac-200 bg-white p-4">
+        <div className="mx-auto max-w-[180px] rounded-2xl border-2 border-dashed border-lilac-200 bg-white p-3">
           <BarcodeCanvas code={created.code} />
         </div>
         <div className="mt-4 flex justify-center gap-2">
@@ -96,7 +124,7 @@ function ProdukBaruForm() {
             <Printer size={14} /> Cetak Label
           </Button>
         </div>
-        <Button full className="mt-4" onClick={() => setCreated(null)}>
+        <Button full className="mt-4" onClick={() => { setCreated(null); handlePickImage(null); }}>
           <Plus size={16} /> Tambah Produk Lain
         </Button>
         <PrintLabelSheet items={printQueue} onDone={() => setPrintQueue(null)} />
@@ -107,6 +135,35 @@ function ProdukBaruForm() {
   return (
     <Card>
       <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
+        <div className="mb-3.5 sm:col-span-2">
+          <label className="mb-1.5 block text-xs font-bold text-ink-soft">Foto Produk (opsional)</label>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="relative flex h-20 w-20 flex-none items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-lilac-200 bg-lilac-50/50 text-ink-soft hover:border-peach-300"
+            >
+              {imagePreview ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={imagePreview} alt="Pratinjau" className="h-full w-full object-cover" />
+              ) : (
+                <ImagePlus size={22} />
+              )}
+            </button>
+            {imagePreview && (
+              <button type="button" onClick={() => handlePickImage(null)} className="flex items-center gap-1 text-xs font-semibold text-rose-500">
+                <X size={13} /> Hapus foto
+              </button>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => handlePickImage(e.target.files?.[0] || null)}
+            />
+          </div>
+        </div>
         <Field label="Nama Barang *" full>
           <Input name="name" required placeholder="Cth: Indomie Goreng" />
         </Field>
@@ -135,8 +192,8 @@ function ProdukBaruForm() {
           <Input name="expiryDate" type="date" />
         </Field>
         <div className="sm:col-span-2">
-          <Button type="submit" full disabled={saving}>
-            <PackagePlus size={17} /> {saving ? 'Menyimpan...' : 'Simpan & Buat Kode Barcode'}
+          <Button type="submit" full disabled={saving || uploadingImage}>
+            <PackagePlus size={17} /> {saving ? 'Menyimpan...' : uploadingImage ? 'Mengunggah foto...' : 'Simpan & Buat Kode Barcode'}
           </Button>
         </div>
       </form>

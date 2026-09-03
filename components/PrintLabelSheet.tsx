@@ -33,21 +33,21 @@ export function PrintLabelSheet({ items, onDone }: { items: PrintItem[] | null; 
           className="print-label"
           style={{
             display: 'inline-block',
-            width: '38mm',
-            minHeight: '26mm',
+            width: '30mm',
+            minHeight: '18mm',
             border: '1px dashed #999',
-            padding: '2mm',
-            margin: '1.5mm',
+            padding: '1.5mm',
+            margin: '1mm',
             textAlign: 'center',
             pageBreakInside: 'avoid',
             verticalAlign: 'top',
           }}
         >
-          <div style={{ fontSize: '8.5px', fontWeight: 700, fontFamily: 'Arial, sans-serif', lineHeight: 1.15, maxHeight: 19, overflow: 'hidden' }}>
+          <div style={{ fontSize: '7px', fontWeight: 700, fontFamily: 'Arial, sans-serif', lineHeight: 1.1, maxHeight: 16, overflow: 'hidden' }}>
             {it.name}
           </div>
-          <div style={{ fontSize: '10.5px', fontWeight: 700, fontFamily: 'monospace', margin: '1mm 0' }}>{rupiah(it.price)}</div>
-          <BarcodeCanvas code={it.code} width={1.3} height={32} />
+          <div style={{ fontSize: '8.5px', fontWeight: 700, fontFamily: 'monospace', margin: '0.5mm 0' }}>{rupiah(it.price)}</div>
+          <BarcodeCanvas code={it.code} width={1} height={22} />
         </div>
       ))}
     </div>
