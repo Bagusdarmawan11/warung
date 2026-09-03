@@ -32,6 +32,25 @@ export function todayISO(): string {
   return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
 }
 
+export function startOfWeekISO(): string {
+  const d = new Date();
+  const off = d.getTimezoneOffset();
+  const local = new Date(d.getTime() - off * 60000);
+  const day = local.getUTCDay() || 7; // Senin = 1 ... Minggu = 7
+  local.setUTCDate(local.getUTCDate() - (day - 1));
+  return local.toISOString().slice(0, 10);
+}
+
+export function startOfMonthISO(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+}
+
+export function startOfYearISO(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-01-01`;
+}
+
 export function daysUntil(iso: string | null | undefined): number | null {
   if (!iso) return null;
   const today = new Date(todayISO() + 'T00:00:00');

@@ -69,9 +69,9 @@ export async function getSalesHistory(range?: HistoryRange): Promise<SaleRow[]> 
 
 export async function getStockInHistory(range?: HistoryRange): Promise<StockInHistoryRow[]> {
   const supabase = await createClient();
-  let q = supabase.from('stock_in_history').select('*').order('created_at', { ascending: false }).limit(2000);
+  let q = supabase.from('stock_in_history').select('*').order('received_at', { ascending: false }).limit(3000);
   if (range?.from) q = q.gte('received_at', range.from);
-  if (range?.to) q = q.lte('received_at', range.to);
+  if (range?.to) q = q.lte('received_at', range.to + 'T23:59:59');
   if (range?.search) q = q.ilike('product_name_snapshot', `%${range.search}%`);
   const { data, error } = await q;
   if (error) throw new Error(error.message);

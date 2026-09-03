@@ -2,10 +2,9 @@
 
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { PackagePlus, Download, Printer, Plus, Search, ImagePlus, X } from 'lucide-react';
+import { PackagePlus, Download, Plus, Search, ImagePlus, X } from 'lucide-react';
 import { Button, Card, Field, Input, Select, ToggleGroup } from '@/components/ui';
-import { BarcodeCanvas, downloadCanvasPng } from '@/components/BarcodeCanvas';
-import { PrintLabelSheet, type PrintItem } from '@/components/PrintLabelSheet';
+import { BarcodeCanvas, downloadBarcodeAsPng } from '@/components/BarcodeCanvas';
 import { createProduct, addBatch } from '@/lib/actions/products';
 import { getProductSummaries } from '@/lib/actions/products';
 import { uploadProductImage } from '@/lib/uploadImage';
@@ -43,7 +42,6 @@ function ProdukBaruForm() {
   const [unitType, setUnitType] = useState<UnitType>('pcs');
   const [saving, setSaving] = useState(false);
   const [created, setCreated] = useState<Product | null>(null);
-  const [printQueue, setPrintQueue] = useState<PrintItem[] | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -113,21 +111,14 @@ function ProdukBaruForm() {
         <div className="mx-auto max-w-[180px] rounded-2xl border-2 border-dashed border-lilac-200 bg-white p-3">
           <BarcodeCanvas code={created.code} />
         </div>
-        <div className="mt-4 flex justify-center gap-2">
-          <Button variant="ghost" size="sm" onClick={() => {
-            const canvas = document.querySelector<HTMLCanvasElement>(`canvas[data-barcode-code="${created.code}"]`);
-            if (canvas) downloadCanvasPng(canvas, `${created.code}-${created.name}.png`);
-          }}>
-            <Download size={14} /> Unduh PNG
-          </Button>
-          <Button variant="dark" size="sm" onClick={() => setPrintQueue([{ code: created.code, name: created.name, price: 0 }])}>
-            <Printer size={14} /> Cetak Label
+        <div className="mt-4 flex justify-center">
+          <Button variant="dark" size="sm" onClick={() => downloadBarcodeAsPng(created.code)}>
+            <Download size={14} /> Unduh Barcode
           </Button>
         </div>
         <Button full className="mt-4" onClick={() => { setCreated(null); handlePickImage(null); }}>
           <Plus size={16} /> Tambah Produk Lain
         </Button>
-        <PrintLabelSheet items={printQueue} onDone={() => setPrintQueue(null)} />
       </Card>
     );
   }

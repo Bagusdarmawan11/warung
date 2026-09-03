@@ -27,13 +27,14 @@ Dibangun dengan **Next.js 15 (App Router) + Supabase + Tailwind**, siap deploy k
 
 - **Beranda**: pemasukan/pengeluaran/profit 30 hari terakhir, total produk, stok kosong, segera kadaluwarsa, grafik tren (bisa ganti tampilan **line/bar**, berwarna), **Analisis AI**, produk terlaris, prediksi restock, dan daftar stok menipis/habis/kadaluwarsa — semua jadi satu halaman.
 - **Kasir**: scan barcode pakai kamera HP/laptop (atau scanner USB/Bluetooth biasa — tinggal ketik/scan lalu Enter), keranjang belanja, harga bisa diedit per transaksi, checkout multi-item yang **atomik** (kalau satu barang gagal, semua batal — tidak ada stok "kepotong sebagian").
-- **Barang Masuk**: tambah produk baru (kode + barcode kecil otomatis dibuat, langsung bisa diunduh PNG / dicetak) atau tambah stok (restock) produk lama. Bisa tambahkan **foto produk** (opsional).
+- **Barang Masuk**: tambah produk baru (kode + barcode kecil otomatis dibuat, langsung bisa diunduh sebagai gambar PNG) atau tambah stok (restock) produk lama. Bisa tambahkan **foto produk** (opsional).
 - **Produk timbangan (gram)**: untuk barang seperti telur, kemiri, lada, dll yang dibeli curah lalu direpack — input berat saat barang masuk (gram), dan saat terjual kasir tinggal input berat yang dibeli pembeli. Harga per gram bisa beda-beda tiap kedatangan barang (lihat bagian FIFO di bawah).
 - **Sistem batch/lot FIFO otomatis**: tiap kali barang masuk (termasuk restock produk yang sama), sistem membuat "batch" baru dengan harga & tanggal kadaluwarsanya sendiri. Saat kasir menjual, stok otomatis dipotong dari batch **paling lama yang masih ada isinya** — kalau batch itu habis, otomatis lanjut ke batch berikutnya. **Ini didesain khusus supaya tidak mungkin salah motong stok barang lama yang sudah habis.**
-- **Daftar Barang**: nomor urut, pagination 20 produk/halaman, filter (stok menipis/habis/kadaluwarsa). **Tekan nama produk** untuk buka detail/edit (termasuk **riwayat transaksi/movement** produk itu). **Tekan & tahan** sebuah produk untuk masuk mode pilih banyak → hapus massal atau cetak label massal, tanpa tombol-tombol yang mengganggu tampilan.
-- **Riwayat**: nomor urut, pagination, **klik transaksi untuk lihat detail** (pembeli, keuntungan, lama barang di stok sebelum terjual, sisa stok saat ini), unduh **PDF** laporan penjualan sesuai filter tanggal.
+- **Daftar Barang**: nomor urut, pagination 20 produk/halaman, filter (stok menipis/habis/kadaluwarsa). **Tekan nama produk** untuk buka detail/edit (termasuk **riwayat transaksi/movement** produk itu). **Tekan & tahan** sebuah produk untuk masuk mode pilih banyak → hapus massal atau **unduh barcode massal** (langsung sebagai gambar PNG kecil polos, tanpa nama/harga — sama seperti stiker barcode di kemasan produk pada umumnya), tanpa tombol-tombol yang mengganggu tampilan.
+- **Riwayat**: nomor urut, pagination, **klik transaksi untuk lihat detail** (pembeli, keuntungan, lama barang di stok sebelum terjual, sisa stok saat ini), unduh **PDF** laporan penjualan sesuai filter tanggal (tombolnya ada di atas, dekat tombol Terapkan).
+- **Beranda — Keuangan**: kartu Pemasukan/Pengeluaran/Profit bisa difilter per **Hari Ini / Minggu Ini / Bulan Ini / Tahun Ini / rentang tanggal kustom**. Profit dihitung dari untung riil tiap penjualan (bukan sekadar pemasukan dikurangi pengeluaran), supaya tidak salah kelihatan minus padahal stok yang baru dibeli memang belum semuanya laku.
 - **Login wajib** (Supabase Auth) — data tidak bisa diakses/diubah orang yang tidak login, walau tahu URL aplikasinya.
-- **Footer** di semua halaman.
+- **Footer** modern di semua halaman.
 - **Desain**: modern, minimalis, pastel, responsif (navbar di atas untuk desktop, di bawah untuk HP).
 
 ## Teknologi
@@ -100,7 +101,7 @@ npm install
 3. Tunggu ± 2 menit sampai project selesai dibuat.
 4. Di sidebar kiri, klik **SQL Editor** → **New query**.
 5. Buka file `supabase/migrations/0001_init.sql` di project ini, **copy semua isinya**, paste ke SQL Editor, klik **Run**. Tunggu sampai sukses (tulisan hijau "Success").
-6. Ulangi langkah yang sama untuk **`0002_functions.sql`**, lalu **`0003_checkout.sql`**, lalu **`0004_security_hardening.sql`**, lalu **`0005_bulk_import.sql`**, lalu **`0006_import_sales_history.sql`**, lalu **`0007_product_images_and_history.sql`** — **urutannya harus persis seperti ini** (0001 → 0002 → 0003 → 0004 → 0005 → 0006 → 0007), karena tiap file bergantung pada file sebelumnya.
+6. Ulangi langkah yang sama untuk **`0002_functions.sql`**, lalu **`0003_checkout.sql`**, lalu **`0004_security_hardening.sql`**, lalu **`0005_bulk_import.sql`**, lalu **`0006_import_sales_history.sql`**, lalu **`0007_product_images_and_history.sql`**, lalu **`0008_precise_timestamps.sql`** — **urutannya harus persis seperti ini** (0001 → 0002 → ... → 0008), karena tiap file bergantung pada file sebelumnya.
 
    > ⚠️ **Jangan lewati file `0004_security_hardening.sql`.** File ini menutup celah keamanan penting (tanpa file ini, siapa pun yang tahu URL Supabase-mu bisa memanggil fungsi checkout/tambah produk tanpa login). Lihat bagian [Keamanan](#keamanan).
 
@@ -203,7 +204,8 @@ git push -u origin main
 ## Panduan Pemakaian
 
 ### Beranda
-- Ringkasan pemasukan/pengeluaran/profit 30 hari terakhir, jumlah produk, stok kosong, dan segera kadaluwarsa.
+- Ringkasan pemasukan/pengeluaran/profit — bisa difilter **Hari Ini / Minggu Ini / Bulan Ini / Tahun Ini**, atau pilih **rentang tanggal sendiri** (Kustom). Profit dihitung dari untung riil tiap transaksi penjualan, bukan pemasukan dikurangi pengeluaran.
+- Jumlah produk, stok kosong, dan segera kadaluwarsa.
 - Grafik tren penjualan — tombol kecil di kanan atas grafik untuk ganti tampilan **garis (line)** atau **batang (bar)** berwarna, dan tombol Harian/Mingguan/Bulanan untuk ganti pengelompokan waktu.
 - **Analisis AI**: klik "Analisis dengan AI" untuk minta Claude merangkum kondisi bisnis + rekomendasi dalam bahasa natural, berdasarkan data ringkasan (bukan data mentah) 120 hari terakhir. Butuh `ANTHROPIC_API_KEY` terisi (lihat [Langkah 4](#langkah-4--konfigurasi-environment-variables)).
 - Di bawahnya: produk terlaris, **prediksi restock** (dihitung dari rata-rata penjualan 14 hari terakhir), dan daftar stok menipis/habis/segera kadaluwarsa.
@@ -215,20 +217,25 @@ git push -u origin main
 - Nama pembeli opsional.
 
 ### Barang Masuk
-- **Produk Baru**: isi nama, jenis satuan (pcs/gram), jumlah, harga modal & jual, kadaluwarsa (opsional), dan **foto produk** (opsional) → kode & barcode otomatis dibuat, langsung ada tombol unduh PNG / cetak label.
-- **Tambah Stok**: cari produk yang sudah ada, isi jumlah tambahan (boleh harga beda dari sebelumnya) → otomatis jadi batch baru, barcode/kode produk tetap sama seperti sebelumnya (tidak perlu cetak stiker baru).
+- **Produk Baru**: isi nama, jenis satuan (pcs/gram), jumlah, harga modal & jual, kadaluwarsa (opsional), dan **foto produk** (opsional) → kode & barcode otomatis dibuat, langsung ada tombol **Unduh Barcode** (file gambar PNG kecil, siap ditempel/cetak sendiri di stiker — tanpa nama/harga, cuma barcode polos seperti di kemasan produk pada umumnya).
+- **Tambah Stok**: cari produk yang sudah ada, isi jumlah tambahan (boleh harga beda dari sebelumnya) → otomatis jadi batch baru, barcode/kode produk tetap sama seperti sebelumnya (tidak perlu unduh ulang / stiker baru).
 
 ### Produk (Daftar Barang)
-- **Tekan nama/baris produk** untuk buka detail — ada tab **Info & Stok** (edit nama/kategori, koreksi stok manual, riwayat harga per batch, hapus produk) dan tab **Riwayat Transaksi** (semua pergerakan masuk/keluar produk itu, lengkap dengan pembeli & untung per transaksi).
-- **Tekan & tahan** sebuah produk untuk masuk mode pilih banyak (muncul toolbar di atas) → pilih beberapa produk lalu **Cetak** label sekaligus atau **Hapus** massal. Ketuk ikon ✕ atau lepas semua pilihan untuk keluar dari mode ini.
+- **Tekan nama/baris produk** untuk buka detail — ada tab **Info & Stok** (edit nama/kategori, koreksi stok manual, riwayat harga per batch, unduh barcode, hapus produk) dan tab **Riwayat Transaksi** (semua pergerakan masuk/keluar produk itu, lengkap dengan pembeli & untung per transaksi).
+- **Tekan & tahan** sebuah produk untuk masuk mode pilih banyak (muncul toolbar di atas) → pilih beberapa produk lalu **Unduh Barcode** sekaligus (masing-masing jadi file PNG terpisah) atau **Hapus** massal. Ketuk ikon ✕ atau lepas semua pilihan untuk keluar dari mode ini.
 - Nomor urut & pagination (20 produk per halaman) supaya daftar panjang tetap rapi.
 - Filter chip: Semua / Stok Menipis / Stok Habis / Segera Kadaluwarsa.
 - Tombol **Import CSV** membuka halaman import data lama (lihat [Langkah 6](#panduan-instalasi-lengkap) di atas) — bisa dipakai kapan saja, tidak cuma sekali di awal.
 
 ### Riwayat
-- Nomor urut & pagination, filter tanggal dan pencarian (termasuk cari berdasarkan nama pembeli).
+- Nomor urut & pagination, filter tanggal dan pencarian (termasuk cari berdasarkan nama pembeli). Tombol **Terapkan** dan **Unduh PDF/CSV** ada di atas, sejajar.
 - **Ketuk sebuah transaksi penjualan** untuk lihat detail: qty, harga, total, keuntungan, siapa pembelinya, berapa lama barang itu ada di stok sebelum akhirnya terjual (dihitung dari tanggal batch masuk ke tanggal terjual), dan sisa stok produk itu sekarang.
 - Unduh **PDF** laporan penjualan sesuai filter tanggal yang sedang aktif (tab Penjualan), atau CSV untuk tab Barang Masuk.
+
+### Import Data Lama — kecerdasan tambahan
+- **Nama pembeli otomatis "diwariskan"**: kalau di file Penjualan kamu ada baris tanpa nama pembeli (karena itu barang ke-2/ke-3 dst dari transaksi yang sama dengan baris di atasnya), sistem otomatis mengisi nama pembeli dari baris terakhir yang ada namanya — jadi tidak ada lagi riwayat dengan pembeli kosong padahal sebenarnya satu transaksi.
+- **Urutan waktu otomatis disusun dari urutan baris**: karena file lama biasanya cuma punya kolom tanggal (tanpa jam), sistem otomatis memberi waktu sintetis per baris — baris paling atas di file dianggap paling lama, baris di bawahnya +1 menit, dst — dan barang masuk hari itu diberi jam lebih pagi daripada penjualan di hari yang sama, supaya urutan riwayatnya selalu masuk akal (barang tidak pernah kelihatan terjual sebelum masuk).
+- **Sisa stok dihitung otomatis**, tidak bergantung sama sekali pada kolom "Stock Sebelum"/"Sisa Stock" manual di spreadsheet lama kamu — jadi walau banyak baris yang kolom itu belum sempat kamu isi, tidak masalah; sistem menghitung sendiri dari total qty masuk dikurangi total qty terjual per produk.
 
 ---
 
@@ -266,6 +273,7 @@ psql -d warungtest -f supabase/migrations/0004_security_hardening.sql
 psql -d warungtest -f supabase/migrations/0005_bulk_import.sql
 psql -d warungtest -f supabase/migrations/0006_import_sales_history.sql
 psql -d warungtest -f supabase/migrations/0007_product_images_and_history.sql
+psql -d warungtest -f supabase/migrations/0008_precise_timestamps.sql
 psql -d warungtest -f supabase/test/01_test_anon_blocked.sql
 psql -d warungtest -f supabase/test/02_test_fifo_checkout.sql
 psql -d warungtest -f supabase/test/03_test_bulk_import.sql

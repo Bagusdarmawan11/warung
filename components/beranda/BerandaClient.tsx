@@ -1,17 +1,20 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   TrendingUp, Trophy, PackageSearch, Sparkles, Loader2, AlertTriangle,
   LineChart as LineChartIcon, BarChart3, Boxes, Wallet, ArrowDownCircle, ArrowUpCircle,
 } from 'lucide-react';
-import { Card, Badge, EmptyState, ToggleGroup } from '@/components/ui';
+import { Card, Badge, EmptyState, ToggleGroup, Input } from '@/components/ui';
 import { TrendChartToggle } from '@/components/beranda/TrendChartToggle';
 import { BestSellerChart } from '@/components/beranda/BestSellerChart';
 import { aggregateByPeriod, bestSellers, restockPrediction, summarize } from '@/lib/analytics';
-import { rupiah, formatTanggal, todayISO, daysUntil } from '@/lib/format';
+import { getSalesHistory, getStockInHistory } from '@/lib/actions/sales';
+import { rupiah, formatTanggal, todayISO, daysUntil, startOfWeekISO, startOfMonthISO, startOfYearISO } from '@/lib/format';
 import type { SaleRow, StockInHistoryRow, ProductStockSummary } from '@/lib/types';
+
+type FinancePeriod = 'today' | 'week' | 'month' | 'year' | 'custom';
 
 export function BerandaClient({
   products,
@@ -30,12 +33,51 @@ export function BerandaClient({
   const salesToday = sales.filter((s) => s.sold_at.slice(0, 10) === today);
   const { omzet: omzetToday, untung: untungToday, jumlahItem: itemToday } = summarize(salesToday);
 
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
-  const sales30 = sales.filter((s) => s.sold_at.slice(0, 10) >= thirtyDaysAgo);
-  const stockIn30 = stockIn.filter((r) => (r.received_at || '') >= thirtyDaysAgo);
-  const pemasukan30 = sales30.reduce((s, r) => s + r.total, 0);
-  const pengeluaran30 = stockIn30.reduce((s, r) => s + r.qty * (r.buy_price || 0), 0);
-  const profit30 = pemasukan30 - pengeluaran30;
+  // ---------------------------------------------------------------------
+  // Keuangan periode (bisa dipilih: hari ini / minggu ini / bulan ini /
+  // tahun ini / kustom) - ambil data segar sesuai rentang yang dipilih.
+  // ---------------------------------------------------------------------
+  const [financePeriod, setFinancePeriod] = useState<FinancePeriod>('month');
+  const [customFrom, setCustomFrom] = useState(startOfMonthISO());
+  const [customTo, setCustomTo] = useState(today);
+  const [financeSales, setFinanceSales] = useState<SaleRow[]>(sales.filter((s) => s.sold_at.slice(0, 10) >= startOfMonthISO()));
+  const [financeStockIn, setFinanceStockIn] = useState<StockInHistoryRow[]>(stockIn.filter((r) => (r.received_at || '').slice(0, 10) >= startOfMonthISO()));
+  const [financeLoading, setFinanceLoading] = useState(false);
+
+  function rangeFor(p: FinancePeriod): { from: string; to: string } {
+    if (p === 'today') return { from: today, to: today };
+    if (p === 'week') return { from: startOfWeekISO(), to: today };
+    if (p === 'month') return { from: startOfMonthISO(), to: today };
+    if (p === 'year') return { from: startOfYearISO(), to: today };
+    return { from: customFrom, to: customTo };
+  }
+
+  async function reloadFinance(p: FinancePeriod, from?: string, to?: string) {
+    const range = p === 'custom' ? { from: from || customFrom, to: to || customTo } : rangeFor(p);
+    setFinanceLoading(true);
+    try {
+      const [s, si] = await Promise.all([getSalesHistory(range), getStockInHistory(range)]);
+      setFinanceSales(s);
+      setFinanceStockIn(si);
+    } finally {
+      setFinanceLoading(false);
+    }
+  }
+
+  function handlePeriodChange(p: FinancePeriod) {
+    setFinancePeriod(p);
+    if (p !== 'custom') reloadFinance(p);
+  }
+
+  const financeSummary = useMemo(() => summarize(financeSales), [financeSales]);
+  const pemasukan = financeSummary.omzet;
+  // Profit = keuntungan RIIL dari tiap barang yang benar-benar terjual
+  // ((harga jual - harga modal) x qty), BUKAN pemasukan dikurangi
+  // pengeluaran — karena barang masuk (belanja stok) belum tentu semuanya
+  // laku di periode yang sama, jadi menghitungnya dengan cara itu akan
+  // selalu kelihatan minus walau bisnisnya sehat.
+  const profit = financeSummary.untung;
+  const pengeluaran = financeStockIn.reduce((s, r) => s + r.qty * (r.buy_price || 0), 0);
 
   const totalModal = products.reduce((s, p) => s + p.stok * (p.harga_modal_aktif || 0), 0);
   const stokMenipis = products.filter((p) => p.stok > 0 && p.stok <= p.low_stock_threshold).sort((a, b) => a.stok - b.stok);
@@ -71,6 +113,10 @@ export function BerandaClient({
     }
   }
 
+  const financePeriodLabel: Record<FinancePeriod, string> = {
+    today: 'Hari Ini', week: 'Minggu Ini', month: 'Bulan Ini', year: 'Tahun Ini', custom: 'Periode Kustom',
+  };
+
   return (
     <div className="animate-slide-up">
       <div className="mb-5">
@@ -88,22 +134,48 @@ export function BerandaClient({
         </div>
       </div>
 
-      {/* Pemasukan / Pengeluaran / Profit - 30 hari */}
-      <div className="mb-2 flex items-center gap-1.5"><Wallet size={15} className="text-peach-400" /><h2 className="font-display text-sm font-bold text-ink">Keuangan 30 Hari Terakhir</h2></div>
-      <div className="mb-5 grid grid-cols-3 gap-2.5">
+      {/* Pemasukan / Pengeluaran / Profit - periode bisa dipilih */}
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5"><Wallet size={15} className="text-peach-400" /><h2 className="font-display text-sm font-bold text-ink">Keuangan &middot; {financePeriodLabel[financePeriod]}</h2></div>
+        <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
+          {(['today', 'week', 'month', 'year', 'custom'] as FinancePeriod[]).map((p) => (
+            <button
+              key={p}
+              onClick={() => handlePeriodChange(p)}
+              className={`flex-none rounded-full border px-3 py-1.5 text-[11px] font-bold whitespace-nowrap ${financePeriod === p ? 'border-ink bg-ink text-cream' : 'border-lilac-200 bg-white text-ink-soft'}`}
+            >
+              {financePeriodLabel[p]}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {financePeriod === 'custom' && (
+        <div className="mb-3 flex items-center gap-2">
+          <Input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
+          <span className="text-xs text-ink-soft">s/d</span>
+          <Input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
+          <button onClick={() => reloadFinance('custom', customFrom, customTo)} className="flex-none rounded-xl bg-ink px-4 py-2.5 text-xs font-bold text-cream">
+            Terapkan
+          </button>
+        </div>
+      )}
+
+      <div className={`mb-5 grid grid-cols-3 gap-2.5 transition-opacity ${financeLoading ? 'opacity-50' : ''}`}>
         <Card tight className="!bg-mint-50 !border-mint-100">
           <div className="mb-1 flex items-center gap-1 text-mint-600"><ArrowDownCircle size={13} /><p className="text-[10px] font-bold uppercase">Pemasukan</p></div>
-          <p className="font-mono text-sm font-bold text-ink sm:text-base">{rupiah(pemasukan30)}</p>
+          <p className="font-mono text-sm font-bold text-ink sm:text-base">{rupiah(pemasukan)}</p>
         </Card>
         <Card tight className="!bg-peach-50 !border-peach-100">
           <div className="mb-1 flex items-center gap-1 text-peach-500"><ArrowUpCircle size={13} /><p className="text-[10px] font-bold uppercase">Pengeluaran</p></div>
-          <p className="font-mono text-sm font-bold text-ink sm:text-base">{rupiah(pengeluaran30)}</p>
+          <p className="font-mono text-sm font-bold text-ink sm:text-base">{rupiah(pengeluaran)}</p>
         </Card>
         <Card tight className="!bg-lilac-50 !border-lilac-100">
           <div className="mb-1 flex items-center gap-1 text-lilac-500"><TrendingUp size={13} /><p className="text-[10px] font-bold uppercase">Profit</p></div>
-          <p className={`font-mono text-sm font-bold sm:text-base ${profit30 >= 0 ? 'text-ink' : 'text-rose-500'}`}>{rupiah(profit30)}</p>
+          <p className={`font-mono text-sm font-bold sm:text-base ${profit >= 0 ? 'text-ink' : 'text-rose-500'}`}>{rupiah(profit)}</p>
         </Card>
       </div>
+      <p className="mb-6 -mt-3 text-[10px] text-ink-soft/70">Profit dihitung dari untung riil tiap barang yang terjual (harga jual − harga modal), bukan sekadar pemasukan dikurangi pengeluaran — karena stok yang baru dibeli belum tentu langsung laku semua di periode yang sama.</p>
 
       {/* Info produk */}
       <div className="mb-6 grid grid-cols-3 gap-2.5">

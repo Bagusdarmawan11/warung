@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Search, Printer, Boxes, Plus, UploadCloud, X, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Boxes, Plus, UploadCloud, X, Trash2, Download, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Card, Input, Chip, Badge, Button, EmptyState } from '@/components/ui';
 import { ConfirmDialog } from '@/components/Modal';
-import { PrintLabelSheet, type PrintItem } from '@/components/PrintLabelSheet';
+import { downloadBarcodesAsPng } from '@/components/BarcodeCanvas';
 import { ProductEditModal } from '@/components/produk/ProductEditModal';
 import { getProductSummaries, deleteProduct } from '@/lib/actions/products';
 import { useLongPress } from '@/lib/hooks/useLongPress';
@@ -26,7 +26,6 @@ export function ProdukClient({ initialProducts }: { initialProducts: ProductStoc
   const [editing, setEditing] = useState<ProductStockSummary | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ProductStockSummary | null>(null);
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
-  const [printQueue, setPrintQueue] = useState<PrintItem[] | null>(null);
 
   async function refresh() {
     const fresh = await getProductSummaries();
@@ -68,10 +67,10 @@ export function ProdukClient({ initialProducts }: { initialProducts: ProductStoc
     setSelected(new Set());
   }
 
-  function printSelected() {
-    const items = products.filter((p) => selected.has(p.product_id)).map((p) => ({ code: p.code, name: p.name, price: p.harga_jual_aktif || 0 }));
+  function downloadSelectedBarcodes() {
+    const items = products.filter((p) => selected.has(p.product_id)).map((p) => ({ code: p.code, filename: `${p.code}.png` }));
     if (!items.length) return;
-    setPrintQueue(items);
+    downloadBarcodesAsPng(items);
   }
 
   async function handleDelete() {
@@ -124,7 +123,7 @@ export function ProdukClient({ initialProducts }: { initialProducts: ProductStoc
             <X size={15} />
           </button>
           <span className="flex-1 text-sm font-bold">{selected.size} dipilih</span>
-          <Button variant="secondary" size="sm" onClick={printSelected}><Printer size={13} /> Cetak</Button>
+          <Button variant="secondary" size="sm" onClick={downloadSelectedBarcodes}><Download size={13} /> Unduh Barcode</Button>
           <Button variant="danger" size="sm" onClick={() => setBulkDeleteConfirm(true)}><Trash2 size={13} /> Hapus</Button>
         </div>
       ) : (
@@ -209,8 +208,6 @@ export function ProdukClient({ initialProducts }: { initialProducts: ProductStoc
         message={`Hapus ${selected.size} produk terpilih? Produk yang punya riwayat transaksi akan diarsipkan, bukan dihapus total.`}
         danger
       />
-
-      <PrintLabelSheet items={printQueue} onDone={() => setPrintQueue(null)} />
     </div>
   );
 }

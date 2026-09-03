@@ -96,9 +96,20 @@ export function RiwayatClient({
         <div className="flex gap-2">
           <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
           <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
-          <button onClick={applyFilter} className="flex-none rounded-xl bg-ink px-4 text-xs font-bold text-cream">
-            {loading ? '...' : 'Terapkan'}
+        </div>
+        <div className="mt-2 flex gap-2">
+          <button onClick={applyFilter} className="flex-1 rounded-xl bg-ink py-2.5 text-xs font-bold text-cream">
+            {loading ? 'Memuat...' : 'Terapkan'}
           </button>
+          {sub === 'keluar' ? (
+            <button onClick={exportPdf} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-peach-200 bg-peach-50 py-2.5 text-xs font-bold text-peach-600">
+              <FileText size={14} /> Unduh PDF
+            </button>
+          ) : (
+            <button onClick={exportCsv} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-lilac-200 bg-lilac-50 py-2.5 text-xs font-bold text-ink-soft">
+              <Download size={14} /> Unduh CSV
+            </button>
+          )}
         </div>
       </Card>
 
@@ -163,18 +174,6 @@ export function RiwayatClient({
           </button>
         </div>
       )}
-
-      <div className="mt-6 flex flex-wrap gap-4">
-        {sub === 'keluar' ? (
-          <button onClick={exportPdf} className="flex items-center gap-1.5 text-xs font-bold text-ink-soft hover:text-ink">
-            <FileText size={14} /> Unduh PDF ({filteredSales.length} transaksi sesuai filter)
-          </button>
-        ) : (
-          <button onClick={exportCsv} className="flex items-center gap-1.5 text-xs font-bold text-ink-soft hover:text-ink">
-            <Download size={14} /> Unduh CSV
-          </button>
-        )}
-      </div>
 
       <SaleDetailModal sale={detailSale} onClose={() => setDetailSale(null)} />
     </div>

@@ -2,13 +2,13 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Save, PlusCircle, MinusCircle, Layers, ImagePlus, Printer, Trash2, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
+import { Save, PlusCircle, MinusCircle, Layers, ImagePlus, Download, Trash2, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
 import { Modal, ConfirmDialog } from '@/components/Modal';
 import { Button, Field, Input, Badge, ToggleGroup } from '@/components/ui';
 import { getBatchesForProduct, updateProduct, updateBatchPrice, adjustStock, getProductMovements, deleteProduct, type ProductMovement } from '@/lib/actions/products';
 import { uploadProductImage } from '@/lib/uploadImage';
 import { rupiah, formatTanggal, formatTanggalWaktu, formatQty } from '@/lib/format';
-import { PrintLabelSheet, type PrintItem } from '@/components/PrintLabelSheet';
+import { downloadBarcodeAsPng } from '@/components/BarcodeCanvas';
 import type { ProductBatch, ProductStockSummary } from '@/lib/types';
 
 export function ProductEditModal({
@@ -32,7 +32,6 @@ export function ProductEditModal({
   const [adjustNote, setAdjustNote] = useState('');
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
-  const [printQueue, setPrintQueue] = useState<PrintItem[] | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -139,8 +138,8 @@ export function ProductEditModal({
 
       <div className="mb-4 flex items-center justify-between gap-2">
         <ToggleGroup value={tab} onChange={(v) => setTab(v as any)} options={[{ value: 'info', label: 'Info & Stok' }, { value: 'riwayat', label: 'Riwayat Transaksi' }]} />
-        <button onClick={() => setPrintQueue([{ code: product.code, name: product.name, price: product.harga_jual_aktif || 0 }])} className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-lilac-100 text-ink-soft hover:bg-lilac-200" title="Cetak barcode">
-          <Printer size={15} />
+        <button onClick={() => downloadBarcodeAsPng(product.code)} className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-lilac-100 text-ink-soft hover:bg-lilac-200" title="Unduh barcode">
+          <Download size={15} />
         </button>
       </div>
 
@@ -198,7 +197,6 @@ export function ProductEditModal({
         <MovementList movements={movements} loading={loadingMovements} unitType={product.unit_type} />
       )}
 
-      <PrintLabelSheet items={printQueue} onDone={() => setPrintQueue(null)} />
       <ConfirmDialog
         open={confirmDelete}
         onClose={() => setConfirmDelete(false)}
