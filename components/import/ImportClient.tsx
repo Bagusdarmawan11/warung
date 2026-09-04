@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { UploadCloud, FileSpreadsheet, CheckCircle2, AlertTriangle, Loader2, Info, PackagePlus, Receipt, ArrowRight } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { importLegacyCsv, type ImportResult } from '@/lib/actions/import';
+import { BackupImagesButton } from '@/components/import/BackupImagesButton';
 
 function readFileAsText(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -52,6 +53,11 @@ export function ImportClient() {
           Upload catatan lama kamu langsung dari browser — tidak perlu komputer atau terminal.
         </p>
       </div>
+
+      <Card className="mb-4 !bg-lilac-50/40">
+        <p className="mb-3 text-xs font-bold text-ink-soft">Mau reset & import ulang? Backup foto produk kamu dulu di sini (langsung dari browser, tanpa perlu komputer/terminal):</p>
+        <BackupImagesButton />
+      </Card>
 
       <Card className="mb-4 !p-4 sm:!p-5">
         <FileDropField

@@ -264,6 +264,7 @@ Gemini API punya kuota gratis harian yang cukup besar untuk pemakaian fitur Anal
 - Unduh **PDF** laporan penjualan sesuai filter tanggal yang sedang aktif (tab Penjualan), atau CSV untuk tab Barang Masuk.
 
 ### Import Data Lama — kecerdasan tambahan
+- Ada tombol **Backup Semua Foto Produk (ZIP)** di paling atas halaman ini — berguna sebelum reset+import ulang (lihat bagian [Backup & bersihkan foto produk](#backup--bersihkan-foto-produk) di atas).
 - **Nama pembeli otomatis "diwariskan"**: kalau di file Penjualan kamu ada baris tanpa nama pembeli (karena itu barang ke-2/ke-3 dst dari transaksi yang sama dengan baris di atasnya), sistem otomatis mengisi nama pembeli dari baris terakhir yang ada namanya — jadi tidak ada lagi riwayat dengan pembeli kosong padahal sebenarnya satu transaksi.
 - **Urutan waktu otomatis disusun dari urutan baris**: karena file lama biasanya cuma punya kolom tanggal (tanpa jam), sistem otomatis memberi waktu sintetis per baris — baris paling atas di file dianggap paling lama, baris di bawahnya +1 menit, dst — dan barang masuk hari itu diberi jam lebih pagi daripada penjualan di hari yang sama, supaya urutan riwayatnya selalu masuk akal (barang tidak pernah kelihatan terjual sebelum masuk).
 - **Sisa stok dihitung otomatis**, tidak bergantung sama sekali pada kolom "Stock Sebelum"/"Sisa Stock" manual di spreadsheet lama kamu — jadi walau banyak baris yang kolom itu belum sempat kamu isi, tidak masalah; sistem menghitung sendiri dari total qty masuk dikurangi total qty terjual per produk.
@@ -275,6 +276,14 @@ Gemini API punya kuota gratis harian yang cukup besar untuk pemakaian fitur Anal
 Kalau kamu perlu mulai dari nol lagi — misalnya setelah update logika import dan mau re-import ulang 2 file CSV supaya nama pembeli & urutan waktunya ikut ter-perbaiki — jalankan **`supabase/scripts/reset_data.sql`** di Supabase SQL Editor. Script ini menghapus **semua** data produk/stok/riwayat (baca peringatan di dalam filenya dulu), lalu mengembalikan penomoran kode produk ke `BR0001` lagi. Setelah itu tinggal import ulang seperti biasa lewat halaman `/import`.
 
 ⚠️ **Soal foto produk:** karena baris produk dihapus, referensi foto di masing-masing produk (`image_url`) ikut hilang bersamanya. File foto aslinya **tidak otomatis terhapus** dari Supabase Storage (cuma jadi "file yatim" yang tidak terpakai — aman, tidak mengganggu, cuma numpuk sedikit ruang penyimpanan), tapi kamu perlu **upload ulang manual** foto-foto itu ke produk yang baru setelah reset + import ulang, karena produk baru punya ID yang berbeda dan tidak otomatis "nyambung" ke foto lama. Kalau fotonya penting, ada baiknya simpan salinannya di HP/komputer dulu sebelum reset.
+
+### Backup & bersihkan foto produk
+
+Sebelum reset, kalau kamu sudah upload foto-foto produk dan mau menyimpannya dulu, **paling mudah lewat browser** (tidak perlu komputer/terminal): buka halaman **Import** di aplikasi kamu, ada tombol **"Backup Semua Foto Produk (ZIP)"** di bagian paling atas. Klik, tunggu prosesnya, dan file ZIP berisi semua foto (nama filenya sudah memuat nama produknya) otomatis terunduh ke folder Downloads HP/laptop kamu — persis seperti download file biasa.
+
+*(Kalau kamu kebetulan punya project ini ter-*clone* di komputer dengan Node.js terpasang, ada juga cara alternatif lewat terminal: `npm run backup-images` — hasilnya tersimpan ke folder `backup-foto-produk/`. Tapi untuk kebanyakan orang, tombol di halaman Import sudah cukup dan lebih mudah.)*
+
+Untuk **lihat daftar** foto yang ada (tanpa mengunduh) atau **menghapus semua** foto dari Storage sekaligus (bersihkan penyimpanan setelah backup), pakai `supabase/scripts/manage_product_images.sql` di SQL Editor — ada query LIHAT dan query HAPUS (yang HAPUS sengaja dikomentari `--` di depannya, hapus tanda itu dulu baru jalankan kalau sudah yakin).
 
 ---
 

@@ -18,6 +18,9 @@
 *.pem
 npm-debug.log*
 
+# backup lokal (jangan ikut ke-commit, isinya foto produk)
+/backup-foto-produk/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

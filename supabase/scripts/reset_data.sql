@@ -37,8 +37,10 @@ alter sequence product_code_seq restart with 1;
 -- OPSIONAL: Bersihkan juga foto produk yang sudah ter-upload
 -- ============================================================================
 -- Kalau kamu juga mau menghapus semua foto produk yang sempat ter-upload
--- (supaya storage tidak menumpuk file yatim/tidak terpakai), jalankan baris
--- di bawah ini SETELAH truncate di atas. Ini menghapus SEMUA isi bucket
--- "product-images", jadi hanya jalankan kalau memang yakin.
+-- (supaya storage tidak menumpuk file yatim/tidak terpakai), BACKUP DULU
+-- pakai `node --env-file=.env.local scripts/backup-product-images.mjs`,
+-- baru jalankan baris di bawah ini (uncomment dulu). Atau pakai file
+-- terpisah supabase/scripts/manage_product_images.sql yang juga bisa
+-- menampilkan daftar filenya dulu sebelum dihapus.
 --
 -- delete from storage.objects where bucket_id = 'product-images';
