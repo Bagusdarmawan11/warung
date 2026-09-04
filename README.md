@@ -279,11 +279,14 @@ Kalau kamu perlu mulai dari nol lagi — misalnya setelah update logika import d
 
 ### Backup & bersihkan foto produk
 
-Sebelum reset, kalau kamu sudah upload foto-foto produk dan mau menyimpannya dulu, **paling mudah lewat browser** (tidak perlu komputer/terminal): buka halaman **Import** di aplikasi kamu, ada tombol **"Backup Semua Foto Produk (ZIP)"** di bagian paling atas. Klik, tunggu prosesnya, dan file ZIP berisi semua foto (nama filenya sudah memuat nama produknya) otomatis terunduh ke folder Downloads HP/laptop kamu — persis seperti download file biasa.
+Sebelum reset, kalau kamu sudah upload foto-foto produk dan mau menyimpannya dulu, **paling mudah lewat browser** (tidak perlu komputer/terminal): buka halaman **Import** di aplikasi kamu, ada 2 tombol di bagian paling atas:
 
-*(Kalau kamu kebetulan punya project ini ter-*clone* di komputer dengan Node.js terpasang, ada juga cara alternatif lewat terminal: `npm run backup-images` — hasilnya tersimpan ke folder `backup-foto-produk/`. Tapi untuk kebanyakan orang, tombol di halaman Import sudah cukup dan lebih mudah.)*
+- **Backup Semua Foto Produk (ZIP)** — mengunduh semua foto jadi satu file ZIP ke folder Downloads HP/laptop kamu (nama filenya sudah memuat nama produknya).
+- **Hapus Semua Foto dari Storage** — setelah backup, tombol ini membersihkan semua foto dari Supabase Storage (minta konfirmasi dulu sebelum benar-benar menghapus).
 
-Untuk **lihat daftar** foto yang ada (tanpa mengunduh) atau **menghapus semua** foto dari Storage sekaligus (bersihkan penyimpanan setelah backup), pakai `supabase/scripts/manage_product_images.sql` di SQL Editor — ada query LIHAT dan query HAPUS (yang HAPUS sengaja dikomentari `--` di depannya, hapus tanda itu dulu baru jalankan kalau sudah yakin).
+> ⚠️ Supabase **sengaja memblokir** perintah `delete from storage.objects` langsung lewat SQL Editor (akan muncul error "Direct deletion from storage tables is not allowed") — jadi penghapusan foto **harus** lewat tombol di aplikasi (yang memakai Storage API resmi), bukan lewat query SQL manual. Kalau cuma mau **melihat** daftar foto yang ada tanpa menghapus, boleh pakai `supabase/scripts/manage_product_images.sql` di SQL Editor.
+
+*(Kalau kamu kebetulan punya project ini ter-*clone* di komputer dengan Node.js terpasang, ada juga cara alternatif lewat terminal untuk backup: `npm run backup-images`. Tapi untuk kebanyakan orang, tombol di halaman Import sudah cukup dan lebih mudah.)*
 
 ---
 

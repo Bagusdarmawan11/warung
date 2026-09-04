@@ -37,10 +37,11 @@ alter sequence product_code_seq restart with 1;
 -- OPSIONAL: Bersihkan juga foto produk yang sudah ter-upload
 -- ============================================================================
 -- Kalau kamu juga mau menghapus semua foto produk yang sempat ter-upload
--- (supaya storage tidak menumpuk file yatim/tidak terpakai), BACKUP DULU
--- pakai `node --env-file=.env.local scripts/backup-product-images.mjs`,
--- baru jalankan baris di bawah ini (uncomment dulu). Atau pakai file
--- terpisah supabase/scripts/manage_product_images.sql yang juga bisa
--- menampilkan daftar filenya dulu sebelum dihapus.
+-- (supaya storage tidak menumpuk file yatim/tidak terpakai): BACKUP DULU,
+-- lalu HAPUS - keduanya lewat tombol di halaman /import aplikasi ini
+-- ("Backup Semua Foto Produk" dan "Hapus Semua Foto dari Storage").
 --
--- delete from storage.objects where bucket_id = 'product-images';
+-- Supabase sengaja MEMBLOKIR `delete from storage.objects` langsung lewat
+-- SQL Editor (akan muncul error "Direct deletion from storage tables is
+-- not allowed") - makanya penghapusan foto harus lewat tombol di aplikasi
+-- (yang memakai Storage API resmi), bukan lewat query SQL.

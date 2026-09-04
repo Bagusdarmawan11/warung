@@ -83,7 +83,6 @@ export async function getProductsWithImages(): Promise<{ id: string; name: strin
   if (error) throw new Error(error.message);
   return (data as any[]) || [];
 }
-
 export async function getBatchesForProduct(productId: string): Promise<ProductBatch[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
