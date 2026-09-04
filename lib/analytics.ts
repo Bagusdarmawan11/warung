@@ -140,3 +140,25 @@ export function summarize(sales: SaleRow[]) {
   const jumlahTrx = new Set(sales.map((s) => s.trx_id)).size;
   return { omzet, untung, jumlahItem, jumlahTrx };
 }
+
+export interface TopBuyerRow {
+  buyer_name: string;
+  total_belanja: number;
+  jumlah_transaksi: number;
+  terakhir_belanja: string;
+}
+
+/** Pelanggan dengan total belanja terbesar (nama pembeli kosong/"Tidak dicatat" diabaikan). */
+export function topBuyers(sales: SaleRow[], limit = 8): TopBuyerRow[] {
+  const map = new Map<string, TopBuyerRow>();
+  for (const s of sales) {
+    const name = (s.buyer_name || '').trim();
+    if (!name) continue;
+    const cur = map.get(name) || { buyer_name: name, total_belanja: 0, jumlah_transaksi: 0, terakhir_belanja: s.sold_at };
+    cur.total_belanja += s.total;
+    cur.jumlah_transaksi += 1;
+    if (s.sold_at > cur.terakhir_belanja) cur.terakhir_belanja = s.sold_at;
+    map.set(name, cur);
+  }
+  return [...map.values()].sort((a, b) => b.total_belanja - a.total_belanja).slice(0, limit);
+}

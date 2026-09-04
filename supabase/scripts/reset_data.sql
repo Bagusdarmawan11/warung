@@ -14,11 +14,15 @@
 --     kamu supaya nama pembeli & urutan waktunya ikut ter-perbaiki.
 --
 -- Cara pakai: Supabase Dashboard → SQL Editor → New query → paste semua
--- isi file ini → Run.
+-- isi file ini → Run. Butuh migration sampai 0010 sudah dijalankan.
 -- ============================================================================
 
 truncate table sales, stock_in_history, product_batches, products
   restart identity cascade;
+
+-- Kosongkan juga penanda "sudah pernah import" (tabel ini baru ada mulai
+-- migration 0010) supaya Barang Masuk & Penjualan bisa diimport ulang.
+truncate table import_flags;
 
 -- Reset penomoran kode produk supaya mulai lagi dari BR0001 (bukan
 -- lanjut dari nomor terakhir sebelum di-reset).

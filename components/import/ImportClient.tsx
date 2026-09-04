@@ -89,8 +89,10 @@ export function ImportClient() {
           <Info size={14} className="mt-0.5 flex-none text-lilac-400" />
           <p className="text-[11px] leading-relaxed text-ink-soft">
             Cukup upload salah satu kalau memang cuma itu yang kamu punya. Semua produk hasil import jadi satuan <b>pcs</b> —
-            produk timbangan (telur, kemiri, dll) tambahkan ulang manual di <b>Barang Masuk → Produk Baru</b> dengan satuan gram.
-            Produk & riwayat yang sudah pernah masuk otomatis dilewati, aman kalau tidak sengaja import dobel.
+            produk timbangan (telur, kemiri, dll) bisa digabung jadi satu lewat fitur <b>Gabung Produk</b> di halaman Produk setelah import.
+            Tiap baris restock di file Barang Masuk dicatat sebagai riwayat sendiri (bukan digabung), dan file ini hanya bisa
+            diimport <b>satu kali</b> per jenis data — aman dari dobel, tapi kalau memang perlu ulang, reset dulu lewat
+            <code className="mx-1 rounded bg-white px-1">supabase/scripts/reset_data.sql</code>.
           </p>
         </div>
       </Card>
@@ -155,13 +157,28 @@ function ResultCard({ result }: { result: ImportResult }) {
   return (
     <div className="animate-pop-in space-y-3">
       {result.productsTotal ? (
-        <Card className="!border-mint-200">
-          <div className="mb-3 flex items-center gap-2 text-mint-600">
-            <CheckCircle2 size={18} />
-            <p className="font-bold">Produk: {result.productsCreated} dari {result.productsTotal} berhasil dibuat baru</p>
-          </div>
-          {!!result.productsSkipped?.length && (
-            <SkippedList title={`Dilewati (${result.productsSkipped.length}) — biasanya karena produk dengan nama ini sudah ada:`} items={result.productsSkipped} />
+        <Card className={result.productsAlreadyImported ? '!border-butter-300' : '!border-mint-200'}>
+          {result.productsAlreadyImported ? (
+            <div className="flex items-start gap-2 text-butter-500">
+              <Info size={18} className="mt-0.5 flex-none" />
+              <div>
+                <p className="font-bold text-ink">Barang Masuk dilewati</p>
+                <p className="mt-1 text-xs text-ink-soft">
+                  Sistem mendeteksi data Barang Masuk SEBELUMNYA sudah pernah diimport, jadi file ini tidak diproses lagi (mencegah stok dobel).
+                  Kalau memang perlu impor ulang dari nol, jalankan <code className="rounded bg-white/60 px-1">supabase/scripts/reset_data.sql</code> dulu.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="mb-3 flex items-center gap-2 text-mint-600">
+                <CheckCircle2 size={18} />
+                <p className="font-bold">{result.productsCreated} produk baru, {result.batchesCreated} riwayat restock dicatat (dari {result.productsTotal} baris)</p>
+              </div>
+              {!!result.productsSkipped?.length && (
+                <SkippedList title={`Baris bermasalah (${result.productsSkipped.length}):`} items={result.productsSkipped} />
+              )}
+            </>
           )}
         </Card>
       ) : null}

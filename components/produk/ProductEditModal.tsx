@@ -2,13 +2,12 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Save, PlusCircle, MinusCircle, Layers, ImagePlus, Download, Trash2, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
+import { Save, PlusCircle, MinusCircle, Layers, ImagePlus, Trash2 } from 'lucide-react';
 import { Modal, ConfirmDialog } from '@/components/Modal';
-import { Button, Field, Input, Badge, ToggleGroup } from '@/components/ui';
-import { getBatchesForProduct, updateProduct, updateBatchPrice, adjustStock, getProductMovements, deleteProduct, type ProductMovement } from '@/lib/actions/products';
+import { Button, Field, Input, Badge } from '@/components/ui';
+import { getBatchesForProduct, updateProduct, updateBatchPrice, adjustStock, deleteProduct } from '@/lib/actions/products';
 import { uploadProductImage } from '@/lib/uploadImage';
-import { rupiah, formatTanggal, formatTanggalWaktu, formatQty } from '@/lib/format';
-import { downloadBarcodeAsPng } from '@/components/BarcodeCanvas';
+import { rupiah, formatTanggal, formatQty } from '@/lib/format';
 import type { ProductBatch, ProductStockSummary } from '@/lib/types';
 
 export function ProductEditModal({
@@ -22,11 +21,8 @@ export function ProductEditModal({
   onSaved: () => void;
   onDeleted: () => void;
 }) {
-  const [tab, setTab] = useState<'info' | 'riwayat'>('info');
   const [batches, setBatches] = useState<ProductBatch[]>([]);
-  const [movements, setMovements] = useState<ProductMovement[] | null>(null);
   const [loadingBatches, setLoadingBatches] = useState(false);
-  const [loadingMovements, setLoadingMovements] = useState(false);
   const [saving, setSaving] = useState(false);
   const [adjustDelta, setAdjustDelta] = useState('');
   const [adjustNote, setAdjustNote] = useState('');
@@ -37,19 +33,10 @@ export function ProductEditModal({
 
   useEffect(() => {
     if (!product) return;
-    setTab('info');
     setImagePreview(product.image_url);
     setLoadingBatches(true);
     getBatchesForProduct(product.product_id).then(setBatches).finally(() => setLoadingBatches(false));
-    setMovements(null);
   }, [product]);
-
-  useEffect(() => {
-    if (tab === 'riwayat' && product && movements === null) {
-      setLoadingMovements(true);
-      getProductMovements(product.product_id).then(setMovements).finally(() => setLoadingMovements(false));
-    }
-  }, [tab, product, movements]);
 
   if (!product) return null;
 
@@ -102,7 +89,6 @@ export function ProductEditModal({
     setAdjustNote('');
     const fresh = await getBatchesForProduct(product!.product_id);
     setBatches(fresh);
-    setMovements(null);
     onSaved();
   }
 
@@ -115,7 +101,7 @@ export function ProductEditModal({
   }
 
   return (
-    <Modal open={!!product} onClose={onClose} title="Detail Produk">
+    <Modal open={!!product} onClose={onClose} title="Edit Produk">
       <div className="mb-4 flex items-center gap-3">
         <button
           onClick={() => fileInputRef.current?.click()}
@@ -131,71 +117,58 @@ export function ProductEditModal({
         </button>
         <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleImagePick(e.target.files?.[0] || null)} />
         <div className="min-w-0">
-          <p className="font-mono text-xs text-ink-soft">{product.code} &middot; {product.unit_type === 'gram' ? 'Timbangan (gram)' : 'Satuan (pcs)'}</p>
-          <p className="truncate font-display text-lg font-bold text-ink">{product.name}</p>
+          <p className="font-mono text-xs text-ink-soft">{product.code} &middot; ketuk foto untuk ganti</p>
+          <p className="truncate font-display text-base font-bold text-ink">{product.name}</p>
         </div>
       </div>
 
-      <div className="mb-4 flex items-center justify-between gap-2">
-        <ToggleGroup value={tab} onChange={(v) => setTab(v as any)} options={[{ value: 'info', label: 'Info & Stok' }, { value: 'riwayat', label: 'Riwayat Transaksi' }]} />
-        <button onClick={() => downloadBarcodeAsPng(product.code)} className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-lilac-100 text-ink-soft hover:bg-lilac-200" title="Unduh barcode">
-          <Download size={15} />
-        </button>
+      <form onSubmit={handleSubmit} className="mb-5 grid grid-cols-1 gap-x-4 sm:grid-cols-2">
+        <Field label="Nama Barang *" full>
+          <Input name="name" required defaultValue={product.name} />
+        </Field>
+        <Field label="Kategori">
+          <Input name="category" defaultValue={product.category || ''} />
+        </Field>
+        <Field label="Batas Stok Menipis">
+          <Input name="threshold" type="number" step="any" defaultValue={product.low_stock_threshold} />
+        </Field>
+        <div className="sm:col-span-2">
+          <Button type="submit" full disabled={saving}>
+            <Save size={16} /> {saving ? 'Menyimpan...' : 'Simpan Perubahan'}
+          </Button>
+        </div>
+      </form>
+
+      <div className="mb-5 rounded-2xl bg-lilac-50 p-3.5">
+        <p className="mb-2 text-xs font-bold text-ink-soft">Koreksi Stok Manual (stok opname)</p>
+        <div className="mb-2 flex gap-2">
+          <Input placeholder={`Jumlah (${product.unit_type})`} type="number" value={adjustDelta} onChange={(e) => setAdjustDelta(e.target.value)} />
+        </div>
+        <Input placeholder="Catatan (opsional)" value={adjustNote} onChange={(e) => setAdjustNote(e.target.value)} className="mb-2" />
+        <div className="flex gap-2">
+          <Button variant="secondary" size="sm" full onClick={() => handleAdjust(1)}><PlusCircle size={14} /> Tambah</Button>
+          <Button variant="danger" size="sm" full onClick={() => handleAdjust(-1)}><MinusCircle size={14} /> Kurangi</Button>
+        </div>
       </div>
 
-      {tab === 'info' ? (
-        <>
-          <form onSubmit={handleSubmit} className="mb-5 grid grid-cols-1 gap-x-4 sm:grid-cols-2">
-            <Field label="Nama Barang *" full>
-              <Input name="name" required defaultValue={product.name} />
-            </Field>
-            <Field label="Kategori">
-              <Input name="category" defaultValue={product.category || ''} />
-            </Field>
-            <Field label="Batas Stok Menipis">
-              <Input name="threshold" type="number" step="any" defaultValue={product.low_stock_threshold} />
-            </Field>
-            <div className="sm:col-span-2">
-              <Button type="submit" full disabled={saving}>
-                <Save size={16} /> {saving ? 'Menyimpan...' : 'Simpan Perubahan'}
-              </Button>
-            </div>
-          </form>
-
-          <div className="mb-5 rounded-2xl bg-lilac-50 p-3.5">
-            <p className="mb-2 text-xs font-bold text-ink-soft">Koreksi Stok Manual (stok opname)</p>
-            <div className="mb-2 flex gap-2">
-              <Input placeholder={`Jumlah (${product.unit_type})`} type="number" value={adjustDelta} onChange={(e) => setAdjustDelta(e.target.value)} />
-            </div>
-            <Input placeholder="Catatan (opsional)" value={adjustNote} onChange={(e) => setAdjustNote(e.target.value)} className="mb-2" />
-            <div className="flex gap-2">
-              <Button variant="secondary" size="sm" full onClick={() => handleAdjust(1)}><PlusCircle size={14} /> Tambah</Button>
-              <Button variant="danger" size="sm" full onClick={() => handleAdjust(-1)}><MinusCircle size={14} /> Kurangi</Button>
-            </div>
+      <div className="mb-5">
+        <p className="mb-2 flex items-center gap-1.5 text-xs font-bold text-ink-soft"><Layers size={14} /> Riwayat Batch (FIFO — batch paling atas dipakai duluan)</p>
+        {loadingBatches ? (
+          <p className="text-xs text-ink-soft">Memuat...</p>
+        ) : batches.length === 0 ? (
+          <p className="text-xs text-ink-soft">Belum ada batch.</p>
+        ) : (
+          <div className="space-y-2">
+            {batches.map((b) => (
+              <BatchRow key={b.id} batch={b} unitType={product.unit_type} onSave={handleBatchPriceSave} />
+            ))}
           </div>
+        )}
+      </div>
 
-          <div className="mb-5">
-            <p className="mb-2 flex items-center gap-1.5 text-xs font-bold text-ink-soft"><Layers size={14} /> Riwayat Batch (FIFO — batch paling atas dipakai duluan)</p>
-            {loadingBatches ? (
-              <p className="text-xs text-ink-soft">Memuat...</p>
-            ) : batches.length === 0 ? (
-              <p className="text-xs text-ink-soft">Belum ada batch.</p>
-            ) : (
-              <div className="space-y-2">
-                {batches.map((b) => (
-                  <BatchRow key={b.id} batch={b} unitType={product.unit_type} onSave={handleBatchPriceSave} />
-                ))}
-              </div>
-            )}
-          </div>
-
-          <button onClick={() => setConfirmDelete(true)} className="flex items-center gap-1.5 text-xs font-bold text-rose-500 hover:underline">
-            <Trash2 size={13} /> Hapus Produk Ini
-          </button>
-        </>
-      ) : (
-        <MovementList movements={movements} loading={loadingMovements} unitType={product.unit_type} />
-      )}
+      <button onClick={() => setConfirmDelete(true)} className="flex items-center gap-1.5 text-xs font-bold text-rose-500 hover:underline">
+        <Trash2 size={13} /> Hapus Produk Ini
+      </button>
 
       <ConfirmDialog
         open={confirmDelete}
@@ -206,39 +179,6 @@ export function ProductEditModal({
         danger
       />
     </Modal>
-  );
-}
-
-function MovementList({ movements, loading, unitType }: { movements: ProductMovement[] | null; loading: boolean; unitType: 'pcs' | 'gram' }) {
-  if (loading || movements === null) return <p className="py-6 text-center text-xs text-ink-soft">Memuat riwayat...</p>;
-  if (movements.length === 0) return <p className="py-6 text-center text-xs text-ink-soft">Belum ada riwayat transaksi untuk produk ini.</p>;
-
-  return (
-    <div className="max-h-[50vh] space-y-2 overflow-y-auto">
-      {movements.map((m) => (
-        <div key={m.id} className="flex items-center gap-3 rounded-xl border border-lilac-100 p-3">
-          <div className={`flex h-9 w-9 flex-none items-center justify-center rounded-full ${m.type === 'masuk' ? 'bg-mint-100 text-mint-600' : 'bg-peach-100 text-peach-500'}`}>
-            {m.type === 'masuk' ? <ArrowDownCircle size={16} /> : <ArrowUpCircle size={16} />}
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-bold text-ink">{m.type === 'masuk' ? 'Barang Masuk' : 'Terjual'}</span>
-              <Badge tone={m.type === 'masuk' ? 'good' : 'info'}>{formatQty(m.qty, unitType)}</Badge>
-            </div>
-            <p className="text-[11px] text-ink-soft">
-              {formatTanggalWaktu(m.date)}
-              {m.type === 'keluar' && m.buyerName ? ` · Pembeli: ${m.buyerName}` : ''}
-            </p>
-          </div>
-          <div className="flex-none text-right">
-            <p className="font-mono text-xs font-bold text-ink">{rupiah(m.unitPrice)}</p>
-            {m.type === 'keluar' && m.unitCost != null && (
-              <p className="font-mono text-[10px] text-mint-600">+{rupiah((m.unitPrice || 0) - m.unitCost)}</p>
-            )}
-          </div>
-        </div>
-      ))}
-    </div>
   );
 }
 

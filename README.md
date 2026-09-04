@@ -25,17 +25,17 @@ Dibangun dengan **Next.js 15 (App Router) + Supabase + Tailwind**, siap deploy k
 
 ## Fitur
 
-- **Beranda**: pemasukan/pengeluaran/profit 30 hari terakhir, total produk, stok kosong, segera kadaluwarsa, grafik tren (bisa ganti tampilan **line/bar**, berwarna), **Analisis AI**, produk terlaris, prediksi restock, dan daftar stok menipis/habis/kadaluwarsa — semua jadi satu halaman.
-- **Kasir**: scan barcode pakai kamera HP/laptop (atau scanner USB/Bluetooth biasa — tinggal ketik/scan lalu Enter), keranjang belanja, harga bisa diedit per transaksi, checkout multi-item yang **atomik** (kalau satu barang gagal, semua batal — tidak ada stok "kepotong sebagian").
-- **Barang Masuk**: tambah produk baru (kode + barcode kecil otomatis dibuat, langsung bisa diunduh sebagai gambar PNG) atau tambah stok (restock) produk lama. Bisa tambahkan **foto produk** (opsional).
-- **Produk timbangan (gram)**: untuk barang seperti telur, kemiri, lada, dll yang dibeli curah lalu direpack — input berat saat barang masuk (gram), dan saat terjual kasir tinggal input berat yang dibeli pembeli. Harga per gram bisa beda-beda tiap kedatangan barang (lihat bagian FIFO di bawah).
-- **Sistem batch/lot FIFO otomatis**: tiap kali barang masuk (termasuk restock produk yang sama), sistem membuat "batch" baru dengan harga & tanggal kadaluwarsanya sendiri. Saat kasir menjual, stok otomatis dipotong dari batch **paling lama yang masih ada isinya** — kalau batch itu habis, otomatis lanjut ke batch berikutnya. **Ini didesain khusus supaya tidak mungkin salah motong stok barang lama yang sudah habis.**
-- **Daftar Barang**: nomor urut, pagination 20 produk/halaman, filter (stok menipis/habis/kadaluwarsa). **Tekan nama produk** untuk buka detail/edit (termasuk **riwayat transaksi/movement** produk itu). **Tekan & tahan** sebuah produk untuk masuk mode pilih banyak → hapus massal atau **unduh barcode massal** (langsung sebagai gambar PNG kecil polos, tanpa nama/harga — sama seperti stiker barcode di kemasan produk pada umumnya), tanpa tombol-tombol yang mengganggu tampilan.
-- **Riwayat**: nomor urut, pagination, **klik transaksi untuk lihat detail** (pembeli, keuntungan, lama barang di stok sebelum terjual, sisa stok saat ini), unduh **PDF** laporan penjualan sesuai filter tanggal (tombolnya ada di atas, dekat tombol Terapkan).
-- **Beranda — Keuangan**: kartu Pemasukan/Pengeluaran/Profit bisa difilter per **Hari Ini / Minggu Ini / Bulan Ini / Tahun Ini / rentang tanggal kustom**. Profit dihitung dari untung riil tiap penjualan (bukan sekadar pemasukan dikurangi pengeluaran), supaya tidak salah kelihatan minus padahal stok yang baru dibeli memang belum semuanya laku.
-- **Login wajib** (Supabase Auth) — data tidak bisa diakses/diubah orang yang tidak login, walau tahu URL aplikasinya.
-- **Footer** modern di semua halaman.
-- **Desain**: modern, minimalis, pastel, responsif (navbar di atas untuk desktop, di bawah untuk HP).
+- **Beranda**: pemasukan/pengeluaran/profit — bisa difilter Hari Ini/Minggu Ini/Bulan Ini/Tahun Ini/Kustom, total produk, stok kosong, segera kadaluwarsa, grafik tren (line/bar, berwarna), **Analisis AI** (Gemini), produk terlaris, **Top Pelanggan** (berdasarkan total belanja), prediksi restock, dan daftar stok menipis/habis/kadaluwarsa — semua jadi satu halaman.
+- **Kasir**: scan barcode pakai kamera HP/laptop (atau scanner USB/Bluetooth biasa), **foto produk tampil di keranjang & bisa diperbesar** (jadi kasir gampang cek fisik barangnya benar), keranjang belanja, harga bisa diedit per transaksi, checkout multi-item yang **atomik**.
+- **Barang Masuk**: tambah produk baru (kode + barcode kecil otomatis, langsung bisa diunduh sebagai gambar PNG) atau tambah stok (restock) produk lama. Bisa tambahkan **foto produk** (opsional).
+- **Produk timbangan (gram)**: untuk barang seperti telur, kemiri, lada, dll yang dibeli curah lalu direpack — input berat saat barang masuk (gram), dan saat terjual kasir tinggal input berat yang dibeli pembeli, tanpa perlu input jumlah butir/pack. Sisa stok ditampilkan dalam gram, bukan jumlah satuan.
+- **Gabung Produk**: kalau ada beberapa produk yang seharusnya satu (misal "Telur Ayam 1 Kg", "Telur Ayam 2 KG", "Telur Ayam 500 gram" — biasanya gara-gara data lama), pilih semuanya (tekan & tahan salah satu, lalu ketuk yang lain) lalu **Gabung** jadi satu produk timbangan baru. Produk lama otomatis diarsipkan (bukan dihapus), riwayat transaksi lama tetap aman.
+- **Sistem batch/lot FIFO otomatis**: tiap kali barang masuk, sistem membuat "batch" baru dengan harga & tanggal kadaluwarsanya sendiri. Penjualan otomatis dipotong dari batch **paling lama yang masih ada isinya**.
+- **Daftar Barang**: nomor urut, pagination 20/halaman, filter status, foto produk di tiap baris. **Tekan nama produk** untuk buka **popup detail** (stok, harga modal, harga jual, estimasi untung — rinci di atas, tombol Edit terpisah di bawahnya) plus tab **Riwayat Transaksi**. **Tekan & tahan** untuk mode pilih banyak (gabung/hapus massal/unduh barcode massal).
+- **Riwayat**: nomor urut, pagination, klik transaksi untuk detail (pembeli, keuntungan, lama barang di stok, sisa stok), unduh **PDF** laporan penjualan.
+- **Login wajib** (Supabase Auth).
+- **Footer** modern & **navbar liquid glass** (efek kaca buram melayang, ala iOS) di semua halaman.
+- **Desain**: modern, minimalis, pastel, responsif.
 
 ## Teknologi
 
@@ -47,7 +47,7 @@ Dibangun dengan **Next.js 15 (App Router) + Supabase + Tailwind**, siap deploy k
 | Scan barcode (kamera) | @zxing/browser |
 | Generate barcode | JsBarcode |
 | Chart | Recharts |
-| AI Insight (opsional) | Anthropic API (Claude) |
+| AI Insight (opsional) | Google Gemini API |
 | Deploy | Vercel |
 
 ---
@@ -80,7 +80,7 @@ Sebelum mulai, siapkan:
 2. **Akun GitHub** — [github.com](https://github.com) (gratis).
 3. **Akun Supabase** — [supabase.com](https://supabase.com) (gratis, tier gratis cukup untuk warung kecil-menengah).
 4. **Akun Vercel** — [vercel.com](https://vercel.com) (gratis, bisa daftar pakai akun GitHub).
-5. *(Opsional, untuk fitur Ringkasan AI)* **Anthropic API key** — [console.anthropic.com](https://console.anthropic.com).
+5. *(Opsional, untuk fitur Analisis AI)* **Google Gemini API key** — gratis di [aistudio.google.com/apikey](https://aistudio.google.com/apikey).
 
 ---
 
@@ -101,7 +101,7 @@ npm install
 3. Tunggu ± 2 menit sampai project selesai dibuat.
 4. Di sidebar kiri, klik **SQL Editor** → **New query**.
 5. Buka file `supabase/migrations/0001_init.sql` di project ini, **copy semua isinya**, paste ke SQL Editor, klik **Run**. Tunggu sampai sukses (tulisan hijau "Success").
-6. Ulangi langkah yang sama untuk **`0002_functions.sql`**, lalu **`0003_checkout.sql`**, lalu **`0004_security_hardening.sql`**, lalu **`0005_bulk_import.sql`**, lalu **`0006_import_sales_history.sql`**, lalu **`0007_product_images_and_history.sql`**, lalu **`0008_precise_timestamps.sql`** — **urutannya harus persis seperti ini** (0001 → 0002 → ... → 0008), karena tiap file bergantung pada file sebelumnya.
+6. Ulangi langkah yang sama untuk **`0002_functions.sql`**, lalu **`0003_checkout.sql`**, lalu **`0004_security_hardening.sql`**, lalu **`0005_bulk_import.sql`**, lalu **`0006_import_sales_history.sql`**, lalu **`0007_product_images_and_history.sql`**, lalu **`0008_precise_timestamps.sql`**, lalu **`0009_merge_products.sql`**, lalu **`0010_import_fifo_redesign.sql`** — **urutannya harus persis seperti ini** (0001 → 0002 → ... → 0010), karena tiap file bergantung pada file sebelumnya.
 
    > ⚠️ **Jangan lewati file `0004_security_hardening.sql`.** File ini menutup celah keamanan penting (tanpa file ini, siapa pun yang tahu URL Supabase-mu bisa memanggil fungsi checkout/tambah produk tanpa login). Lihat bagian [Keamanan](#keamanan).
 
@@ -134,10 +134,10 @@ NEXT_PUBLIC_SUPABASE_URL=https://xxxxxxxxxxxx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOi....
 SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOi....
 NEXT_PUBLIC_NAMA_WARUNG=Warung Bu Siti
-ANTHROPIC_API_KEY=
+GEMINI_API_KEY=
 ```
 
-`ANTHROPIC_API_KEY` boleh dikosongkan dulu — aplikasi tetap jalan normal, hanya tombol "Ringkasan AI" di halaman Analitik yang belum aktif.
+`GEMINI_API_KEY` boleh dikosongkan dulu — aplikasi tetap jalan normal, hanya tombol "Analisis AI" di halaman Beranda yang belum aktif.
 
 ### Langkah 5 — Jalankan di lokal
 
@@ -189,7 +189,7 @@ git push -u origin main
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `NEXT_PUBLIC_NAMA_WARUNG`
-   - `ANTHROPIC_API_KEY` (opsional)
+   - `GEMINI_API_KEY` (opsional)
    - `SUPABASE_SERVICE_ROLE_KEY` **tidak perlu** ditambahkan di Vercel — key itu hanya dipakai script import data lama yang jalan di komputer lokal, tidak dipakai aplikasi yang di-deploy.
 4. Klik **Deploy**. Tunggu ± 1-2 menit.
 5. Setelah selesai, Vercel akan kasih URL seperti `https://nama-repo.vercel.app` — itu alamat aplikasi kasir kamu, bisa dibuka dari HP/laptop mana saja.
@@ -199,6 +199,31 @@ git push -u origin main
 - Buka URL Vercel-nya dari HP kasir & laptop kamu, login pakai akun dari Langkah 3, pastikan bisa lihat data yang sama (karena sama-sama nyambung ke Supabase yang sama).
 - Kalau ganti/tambah environment variable di Vercel, project perlu di-**Redeploy** (Vercel Dashboard → Deployments → titik tiga → Redeploy) supaya perubahan kepakai.
 
+### Mengubah / menambah environment variable di project yang SUDAH di-deploy
+
+Kalau project kamu sudah jalan dan cuma mau tambah/ubah environment variable (misalnya menambahkan `GEMINI_API_KEY`):
+
+1. Buka [vercel.com](https://vercel.com) → login → klik project kamu (misal `warung-rho`).
+2. Klik tab **Settings** (di navigasi atas project) → di sidebar kiri klik **Environment Variables**.
+3. Di kolom **Key** ketik nama variabelnya (misal `GEMINI_API_KEY`), di kolom **Value** paste API key-nya.
+4. Pastikan centang **Production**, **Preview**, dan **Development** (biar aktif di semua environment) — biasanya sudah tercentang semua secara default.
+5. Klik **Save**.
+6. **Wajib Redeploy** supaya perubahan kepakai — buka tab **Deployments**, cari deployment paling atas (paling baru), klik ikon titik tiga (⋮) di sebelah kanannya → **Redeploy** → konfirmasi.
+7. Tunggu sampai statusnya jadi "Ready" (± 1-2 menit), lalu buka lagi aplikasinya — env variable baru sudah aktif.
+
+Kalau ada variabel lama yang mau dihapus (misal `ANTHROPIC_API_KEY` yang sudah tidak dipakai lagi), di halaman Environment Variables yang sama, cari barisnya → klik ikon titik tiga di sebelah kanan baris itu → **Remove** → jangan lupa Redeploy lagi setelahnya.
+
+### Cara mendapatkan Gemini API Key (gratis)
+
+1. Buka [aistudio.google.com/apikey](https://aistudio.google.com/apikey).
+2. Login pakai akun Google kamu (akun Gmail biasa, tidak perlu akun berbayar).
+3. Klik tombol **Create API key** (atau **Get API key** kalau ini kunjungan pertama).
+4. Pilih **Create API key in new project** (kalau belum punya project Google Cloud sebelumnya, biarkan Google buatkan otomatis).
+5. API key akan muncul, berupa teks panjang diawali `AIza...`. Klik ikon copy di sebelahnya.
+6. Paste key ini sebagai value untuk `GEMINI_API_KEY` — baik di `.env.local` (kalau jalan di lokal) maupun di Environment Variables Vercel (lihat langkah di atas).
+
+Gemini API punya kuota gratis harian yang cukup besar untuk pemakaian fitur Analisis AI di aplikasi ini (dipanggil manual tiap kamu klik tombolnya, bukan otomatis terus-menerus), jadi seharusnya tidak perlu upgrade ke paket berbayar untuk pemakaian normal 1 warung.
+
 ---
 
 ## Panduan Pemakaian
@@ -207,11 +232,12 @@ git push -u origin main
 - Ringkasan pemasukan/pengeluaran/profit — bisa difilter **Hari Ini / Minggu Ini / Bulan Ini / Tahun Ini**, atau pilih **rentang tanggal sendiri** (Kustom). Profit dihitung dari untung riil tiap transaksi penjualan, bukan pemasukan dikurangi pengeluaran.
 - Jumlah produk, stok kosong, dan segera kadaluwarsa.
 - Grafik tren penjualan — tombol kecil di kanan atas grafik untuk ganti tampilan **garis (line)** atau **batang (bar)** berwarna, dan tombol Harian/Mingguan/Bulanan untuk ganti pengelompokan waktu.
-- **Analisis AI**: klik "Analisis dengan AI" untuk minta Claude merangkum kondisi bisnis + rekomendasi dalam bahasa natural, berdasarkan data ringkasan (bukan data mentah) 120 hari terakhir. Butuh `ANTHROPIC_API_KEY` terisi (lihat [Langkah 4](#langkah-4--konfigurasi-environment-variables)).
-- Di bawahnya: produk terlaris, **prediksi restock** (dihitung dari rata-rata penjualan 14 hari terakhir), dan daftar stok menipis/habis/segera kadaluwarsa.
+- **Analisis AI**: klik "Analisis dengan AI" untuk minta Gemini merangkum kondisi bisnis + rekomendasi dalam bahasa natural, berdasarkan data ringkasan (bukan data mentah) 120 hari terakhir. Butuh `GEMINI_API_KEY` terisi (lihat [Langkah 4](#langkah-4--konfigurasi-environment-variables)).
+- Di bawahnya: produk terlaris, **Top Pelanggan** (ranking berdasarkan total belanja), **prediksi restock** (dihitung dari rata-rata penjualan 14 hari terakhir), dan daftar stok menipis/habis/segera kadaluwarsa.
 
 ### Kasir
 - Tap ikon kamera untuk scan barcode pakai kamera, atau ketik kode/nama di kotak lalu Enter (juga otomatis kompatibel dengan barcode scanner USB/Bluetooth biasa, karena alat itu meniru keyboard + tombol Enter).
+- **Foto produk tampil otomatis** di saran pencarian & keranjang (kalau sudah pernah diupload) — ketuk foto untuk lihat versi besarnya, jadi kasir gampang mastiin barang fisiknya benar sebelum checkout.
 - Produk timbangan akan memunculkan pop-up kecil untuk isi berat (gram) sebelum masuk keranjang.
 - Harga per baris di keranjang bisa diketuk/diedit langsung kalau mau kasih harga beda saat itu (misal pembulatan atau diskon).
 - Nama pembeli opsional.
@@ -221,8 +247,13 @@ git push -u origin main
 - **Tambah Stok**: cari produk yang sudah ada, isi jumlah tambahan (boleh harga beda dari sebelumnya) → otomatis jadi batch baru, barcode/kode produk tetap sama seperti sebelumnya (tidak perlu unduh ulang / stiker baru).
 
 ### Produk (Daftar Barang)
-- **Tekan nama/baris produk** untuk buka detail — ada tab **Info & Stok** (edit nama/kategori, koreksi stok manual, riwayat harga per batch, unduh barcode, hapus produk) dan tab **Riwayat Transaksi** (semua pergerakan masuk/keluar produk itu, lengkap dengan pembeli & untung per transaksi).
-- **Tekan & tahan** sebuah produk untuk masuk mode pilih banyak (muncul toolbar di atas) → pilih beberapa produk lalu **Unduh Barcode** sekaligus (masing-masing jadi file PNG terpisah) atau **Hapus** massal. Ketuk ikon ✕ atau lepas semua pilihan untuk keluar dari mode ini.
+- **Tekan nama/baris produk** untuk buka **popup detail** — info stok, harga modal, harga jual, dan estimasi untung ditampilkan rinci di bagian atas, dengan tombol **Edit** terpisah di bawah yang membuka popup edit sendiri (nama/kategori, koreksi stok manual, riwayat harga per batch, hapus produk) — jadi popup info tetap bersih. Ada juga tab **Riwayat Transaksi** (semua pergerakan masuk/keluar produk itu, lengkap dengan pembeli & untung per transaksi).
+- **Tekan & tahan** sebuah produk untuk masuk mode pilih banyak (muncul toolbar di atas) → pilih beberapa produk lalu:
+  - **Gabung** — satukan beberapa produk jadi satu produk baru (misal beberapa varian "Telur Ayam X Kg/gram" yang seharusnya cuma 1 produk timbangan). Kamu isi total stok gabungan & harga barunya sendiri; produk-produk lama otomatis diarsipkan (bukan dihapus, riwayat lama tetap aman).
+  - **Barcode** — unduh barcode semua produk terpilih sekaligus (masing-masing jadi file PNG terpisah, polos tanpa nama/harga).
+  - **Hapus** — hapus/arsipkan massal.
+  
+  Ketuk ikon ✕ atau lepas semua pilihan untuk keluar dari mode ini.
 - Nomor urut & pagination (20 produk per halaman) supaya daftar panjang tetap rapi.
 - Filter chip: Semua / Stok Menipis / Stok Habis / Segera Kadaluwarsa.
 - Tombol **Import CSV** membuka halaman import data lama (lihat [Langkah 6](#panduan-instalasi-lengkap) di atas) — bisa dipakai kapan saja, tidak cuma sekali di awal.
@@ -243,6 +274,8 @@ git push -u origin main
 
 Kalau kamu perlu mulai dari nol lagi — misalnya setelah update logika import dan mau re-import ulang 2 file CSV supaya nama pembeli & urutan waktunya ikut ter-perbaiki — jalankan **`supabase/scripts/reset_data.sql`** di Supabase SQL Editor. Script ini menghapus **semua** data produk/stok/riwayat (baca peringatan di dalam filenya dulu), lalu mengembalikan penomoran kode produk ke `BR0001` lagi. Setelah itu tinggal import ulang seperti biasa lewat halaman `/import`.
 
+⚠️ **Soal foto produk:** karena baris produk dihapus, referensi foto di masing-masing produk (`image_url`) ikut hilang bersamanya. File foto aslinya **tidak otomatis terhapus** dari Supabase Storage (cuma jadi "file yatim" yang tidak terpakai — aman, tidak mengganggu, cuma numpuk sedikit ruang penyimpanan), tapi kamu perlu **upload ulang manual** foto-foto itu ke produk yang baru setelah reset + import ulang, karena produk baru punya ID yang berbeda dan tidak otomatis "nyambung" ke foto lama. Kalau fotonya penting, ada baiknya simpan salinannya di HP/komputer dulu sebelum reset.
+
 ---
 
 ## Keamanan
@@ -251,7 +284,7 @@ Kalau kamu perlu mulai dari nol lagi — misalnya setelah update logika import d
 - **Row Level Security** aktif di semua tabel — hanya role `authenticated` yang bisa baca/tulis.
 - Fungsi-fungsi database yang menangani transaksi (checkout, tambah produk, import massal, dst) memakai `SECURITY DEFINER` supaya bisa mengunci baris untuk mencegah race condition — makanya izin eksekusinya **dicabut dari publik** dan hanya diberi ke `authenticated` (lihat `0004_security_hardening.sql` & `0005_bulk_import.sql`). Ini sudah diuji langsung: role anonim dipastikan mendapat error *permission denied* saat mencoba memanggil fungsi-fungsi tsb, dan *insert* langsung ke tabel diblok RLS.
 - `SUPABASE_SERVICE_ROLE_KEY` **hanya** dipakai script import lokal (`scripts/import-legacy-csv.mjs`), tidak pernah dikirim ke browser atau di-deploy ke Vercel.
-- Route API `/api/ai-insight` memeriksa ulang status login di sisi server (lapisan pertahanan kedua di luar middleware) sebelum memanggil API Anthropic, supaya API key-mu tidak bisa "dipinjam" orang lain lewat endpoint itu.
+- Route API `/api/ai-insight` memeriksa ulang status login di sisi server (lapisan pertahanan kedua di luar middleware) sebelum memanggil API Gemini, supaya API key-mu tidak bisa "dipinjam" orang lain lewat endpoint itu.
 - Input pencarian sudah di-escape sebelum masuk ke filter query database, untuk mencegah karakter tak terduga merusak/menyalahgunakan query pencarian.
 
 ---
@@ -280,6 +313,8 @@ psql -d warungtest -f supabase/migrations/0005_bulk_import.sql
 psql -d warungtest -f supabase/migrations/0006_import_sales_history.sql
 psql -d warungtest -f supabase/migrations/0007_product_images_and_history.sql
 psql -d warungtest -f supabase/migrations/0008_precise_timestamps.sql
+psql -d warungtest -f supabase/migrations/0009_merge_products.sql
+psql -d warungtest -f supabase/migrations/0010_import_fifo_redesign.sql
 psql -d warungtest -f supabase/test/01_test_anon_blocked.sql
 psql -d warungtest -f supabase/test/02_test_fifo_checkout.sql
 psql -d warungtest -f supabase/test/03_test_bulk_import.sql
@@ -291,8 +326,9 @@ psql -d warungtest -f supabase/test/05_test_batch_link.sql
 
 ## Batasan & Catatan
 
-- Import data lama (`scripts/import-legacy-csv.mjs`) meringkas tiap produk jadi **1 batch awal** (bukan meniru baris-per-baris riwayat lama), supaya perhitungan stok bersih & tidak dobel. Riwayat detail baru akan tercatat rapi mulai dari pemakaian aplikasi ini.
-- Semua produk hasil import lama dibuat sebagai satuan **pcs** — produk timbangan perlu ditambahkan ulang manual dengan satuan gram.
+- **Cara A (import lewat browser)** meniru riwayat barang masuk **baris-per-baris** (tiap baris restock jadi batch tersendiri, persis kalau kamu tambah stok manual berkali-kali) dan penjualan lama benar-benar memotong stok lewat mekanisme FIFO yang sama dengan Kasir. Import Barang Masuk & Penjualan masing-masing **hanya bisa dijalankan sekali** per database (percobaan berikutnya otomatis dilewati, supaya stok tidak dobel) — kalau perlu ulang, jalankan `supabase/scripts/reset_data.sql` dulu.
+- **Cara B (`scripts/import-legacy-csv.mjs`, CLI lokal)** masih memakai logika lama yang lebih sederhana (meringkas tiap produk jadi 1 batch gabungan, bukan baris-per-baris) — kalau bisa, lebih disarankan pakai Cara A untuk hasil yang lebih detail & akurat.
+- Semua produk hasil import lama dibuat sebagai satuan **pcs**. Untuk produk timbangan (telur, kemiri, lada, dll) yang datanya kebetulan kepecah jadi beberapa produk (misal "Telur Ayam 1 Kg", "Telur Ayam 2 KG", dst — karena nama produknya beda-beda di data lama), gunakan fitur **Gabung Produk** di halaman Produk (tekan & tahan beberapa produk yang mau digabung) untuk menyatukannya jadi satu produk gram. Sistem **tidak** otomatis menggabungkan produk dengan nama BERBEDA (misal "Telur Ayam 1 Kg" vs "Telur Ayam 2 KG" dianggap 2 produk terpisah karena namanya memang beda) — hanya produk dengan nama PERSIS SAMA (huruf besar/kecil diabaikan) yang otomatis dianggap satu produk & direstock sebagai batch tambahan.
 - Aplikasi ini didesain untuk **1 warung** dengan beberapa kasir yang saling percaya (semua user yang login punya akses penuh yang sama) — bukan sistem multi-cabang/multi-tenant dengan pemisahan data antar pemilik.
 - `npm audit` masih menyisakan 1 peringatan *moderate* terkait `postcss` bawaan internal Next.js (dipakai saat proses build saja, bukan kode yang berjalan di browser pengguna) yang baru tuntas kalau upgrade ke Next 16 (major version, berpotensi ada perubahan API yang perlu pengujian ulang). Untuk saat ini risikonya sangat rendah karena tidak reachable dari luar; jalankan `npm audit` secara berkala dan pertimbangkan upgrade di masa depan.
 - Fitur kamera scan barcode butuh izin kamera browser & koneksi **HTTPS** (otomatis terpenuhi begitu di-deploy ke Vercel; di localhost browser modern biasanya tetap mengizinkan untuk keperluan development).

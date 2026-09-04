@@ -10,7 +10,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, reason: 'unauthorized' }, { status: 401 });
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return NextResponse.json({ ok: false, reason: 'not_configured' });
   }
@@ -25,31 +25,36 @@ export async function POST(req: Request) {
   const prompt = buildPrompt(body);
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-5',
-        max_tokens: 900,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    });
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: { maxOutputTokens: 900, temperature: 0.6 },
+        }),
+      }
+    );
 
     if (!res.ok) {
       const errText = await res.text();
-      console.error('Anthropic API error:', errText);
+      console.error('Gemini API error:', errText);
       return NextResponse.json({ ok: false, reason: 'api_error' }, { status: 502 });
     }
 
     const data = await res.json();
-    const text = (data.content || [])
-      .map((block: any) => (block.type === 'text' ? block.text : ''))
+    const text = (data.candidates?.[0]?.content?.parts || [])
+      .map((p: any) => p.text || '')
       .filter(Boolean)
       .join('\n');
+
+    if (!text) {
+      // Kemungkinan diblok oleh safety filter atau alasan lain
+      const blockReason = data.candidates?.[0]?.finishReason || data.promptFeedback?.blockReason;
+      console.error('Gemini returned no text. finishReason/blockReason:', blockReason);
+      return NextResponse.json({ ok: false, reason: 'empty_response' }, { status: 502 });
+    }
 
     return NextResponse.json({ ok: true, text });
   } catch (e) {

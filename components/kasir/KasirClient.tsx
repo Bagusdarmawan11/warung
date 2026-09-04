@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { ScanLine, Plus, Minus, Trash2, Camera, CheckCircle2, ShoppingCart } from 'lucide-react';
+import { ScanLine, Plus, Minus, Trash2, Camera, CheckCircle2, ShoppingCart, ImageIcon } from 'lucide-react';
 import { Button, Card, Input, Field, EmptyState } from '@/components/ui';
 import { Modal, ConfirmDialog } from '@/components/Modal';
 import { BarcodeScannerModal } from '@/components/BarcodeScannerModal';
+import { ImageLightbox } from '@/components/ImageLightbox';
 import { getProductByCode, getProductSummaries } from '@/lib/actions/products';
 import { checkoutCart } from '@/lib/actions/sales';
 import { rupiah, formatQty } from '@/lib/format';
@@ -19,6 +20,25 @@ interface CartLine {
   qty: number;
   unit_price: number;
   stok_tersedia: number;
+  image_url: string | null;
+}
+
+function Thumb({ url, onClick, size = 'h-11 w-11' }: { url: string | null; onClick?: () => void; size?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => { if (url && onClick) { e.stopPropagation(); onClick(); } }}
+      className={`flex ${size} flex-none items-center justify-center overflow-hidden rounded-xl bg-lilac-50 text-lilac-300 ${url ? 'cursor-zoom-in' : 'cursor-default'}`}
+      title={url ? 'Lihat foto' : undefined}
+    >
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt="" className="h-full w-full object-cover" />
+      ) : (
+        <ImageIcon size={16} />
+      )}
+    </button>
+  );
 }
 
 export function KasirClient() {
@@ -31,6 +51,7 @@ export function KasirClient() {
   const [gramValue, setGramValue] = useState('');
   const [insufficientOpen, setInsufficientOpen] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
+  const [lightbox, setLightbox] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
@@ -63,6 +84,7 @@ export function KasirClient() {
           qty: 1,
           unit_price: p.harga_jual_aktif || 0,
           stok_tersedia: p.stok,
+          image_url: p.image_url,
         },
       ];
     });
@@ -126,6 +148,7 @@ export function KasirClient() {
           qty: gram,
           unit_price: gramPrompt.harga_jual_aktif || 0,
           stok_tersedia: gramPrompt.stok,
+          image_url: gramPrompt.image_url,
         },
       ];
     });
@@ -208,10 +231,11 @@ export function KasirClient() {
               <button
                 key={p.product_id}
                 onClick={() => handlePicked(p)}
-                className="flex w-full items-center justify-between gap-2 border-t border-lilac-100 px-3 py-2.5 text-left text-sm first:border-t-0 hover:bg-lilac-50"
+                className="flex w-full items-center gap-2.5 border-t border-lilac-100 px-3 py-2.5 text-left text-sm first:border-t-0 hover:bg-lilac-50"
               >
-                <span className="font-medium text-ink">{p.name}</span>
-                <span className="font-mono text-[11px] text-ink-soft">
+                <Thumb url={p.image_url} onClick={() => setLightbox(p.image_url)} size="h-8 w-8" />
+                <span className="flex-1 truncate font-medium text-ink">{p.name}</span>
+                <span className="flex-none font-mono text-[11px] text-ink-soft">
                   {p.code} &middot; {rupiah(p.harga_jual_aktif)} &middot; stok {formatQty(p.stok, p.unit_type)}
                 </span>
               </button>
@@ -231,6 +255,7 @@ export function KasirClient() {
           <div className="mb-4 space-y-2">
             {cart.map((item) => (
               <div key={item.product_id} className="flex items-center gap-2 rounded-2xl border border-lilac-100 bg-white p-2.5 shadow-soft">
+                <Thumb url={item.image_url} onClick={() => setLightbox(item.image_url)} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-ink">{item.name}</p>
                   <div className="flex items-center gap-1 text-[11px] text-ink-soft">
@@ -278,7 +303,7 @@ export function KasirClient() {
             ))}
           </div>
 
-          <div className="sticky bottom-20 rounded-2xl border border-lilac-100 bg-white p-4 shadow-pop md:bottom-4">
+          <div className="sticky bottom-24 rounded-2xl border border-lilac-100 bg-white p-4 shadow-pop md:bottom-4">
             <div className="mb-3 flex items-baseline justify-between">
               <span className="text-xs font-bold text-ink-soft">Total Belanja</span>
               <span className="font-mono text-2xl font-extrabold text-ink">{rupiah(total)}</span>
@@ -295,6 +320,17 @@ export function KasirClient() {
       <Modal open={!!gramPrompt} onClose={() => setGramPrompt(null)} title={gramPrompt ? `Berat: ${gramPrompt.name}` : ''}>
         {gramPrompt && (
           <>
+            {gramPrompt.image_url && (
+              <div className="mb-4 flex justify-center">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={gramPrompt.image_url}
+                  alt={gramPrompt.name}
+                  className="h-28 w-28 cursor-zoom-in rounded-2xl object-cover shadow-soft"
+                  onClick={() => setLightbox(gramPrompt.image_url)}
+                />
+              </div>
+            )}
             <Field label="Berat terjual (gram)">
               <Input
                 type="number"
@@ -323,6 +359,8 @@ export function KasirClient() {
         confirmLabel="Tetap Lanjutkan"
         danger
       />
+
+      <ImageLightbox src={lightbox} onClose={() => setLightbox(null)} />
     </div>
   );
 }

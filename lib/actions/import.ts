@@ -106,8 +106,10 @@ export interface ImportResult {
   ok: boolean;
   error?: string;
   productsCreated?: number;
+  batchesCreated?: number;
   productsSkipped?: { name: string; reason: string }[];
   productsTotal?: number;
+  productsAlreadyImported?: boolean;
   salesCreated?: number;
   salesSkipped?: { name: string; reason: string }[];
   salesTotal?: number;
@@ -116,14 +118,21 @@ export interface ImportResult {
 
 /**
  * Format khusus template warung ini. Melakukan 2 hal:
- * 1. Membuat produk + stok awal bersih (qty masuk dikurangi qty terjual)
- *    lewat bulk_import_products, dengan waktu masuk disusun berdasarkan
- *    urutan baris asli (bukan cuma tanggal).
- * 2. Menyimpan SETIAP baris di file Penjualan sebagai riwayat transaksi asli
- *    lewat bulk_import_sales_history — nama pembeli yang kosong otomatis
- *    "diwariskan" dari baris terakhir yang ada namanya (asumsi: baris tanpa
- *    nama pembeli adalah bagian dari transaksi yang sama dengan baris di
- *    atasnya), dan waktu terjualnya juga disusun berdasarkan urutan baris asli.
+ *
+ * 1. Barang Masuk: SETIAP BARIS di file jadi BATCH-nya SENDIRI (bukan
+ *    digabung jadi 1 per nama produk) - persis seperti restock manual
+ *    berkali-kali lewat aplikasi. Produk dengan nama yang sama (huruf
+ *    besar/kecil diabaikan) otomatis dianggap satu produk, baris
+ *    berikutnya jadi batch/restock tambahan untuk produk itu. Cuma bisa
+ *    dijalankan SEKALI untuk seluruh database (baris kedua & seterusnya
+ *    otomatis dilewati kalau diulang, supaya tidak dobel stok).
+ *
+ * 2. Penjualan: setiap baris di file Penjualan BENAR-BENAR memotong stok
+ *    dari batch FIFO yang tepat (mesin yang sama dengan transaksi Kasir
+ *    asli) - bukan cuma dicatat sebagai riwayat. Harga yang dicatat tetap
+ *    memakai angka ASLI dari file CSV kamu, supaya laporan untung/rugi
+ *    historis akurat. Nama pembeli yang kosong otomatis "diwariskan" dari
+ *    baris terakhir yang ada namanya.
  */
 export async function importLegacyCsv(masukCsvText: string, jualCsvText: string): Promise<ImportResult> {
   const supabase = await createClient();
@@ -138,84 +147,48 @@ export async function importLegacyCsv(masukCsvText: string, jualCsvText: string)
       return { ok: false, error: 'Upload minimal salah satu file (Barang Masuk atau Penjualan) dengan format yang sesuai.' };
     }
 
-    // ---------- 1. Agregasi Barang Masuk -> daftar produk + stok awal ----------
-    // Produk dipertahankan dalam urutan KEMUNCULAN PERTAMA di file (dipakai
-    // untuk menyusun waktu sintetis di bawah). Pencocokan nama produk memakai
-    // huruf kecil semua (case-insensitive) supaya "Telur Ayam 500 gram" dan
-    // "Telur Ayam 500 Gram" dianggap produk yang SAMA (bukan 2 produk beda
-    // cuma gara-gara beda huruf besar/kecil) — nama yang dipakai untuk
-    // ditampilkan adalah nama dari kemunculan PERTAMA di file.
-    type Agg = { name: string; totalQty: number; buy: number; sell: number; expiry: string | null; receivedAt: string };
-    const agg = new Map<string, Agg>();
-    const order: string[] = [];
+    // ---------- 1. Barang Masuk: satu item per BARIS (bukan digabung) ----------
+    const masukSeenNames = new Set<string>(); // buat deteksi produk "terjual tapi tidak pernah masuk"
+    const masukDateKeys = masukRows.map((r) => cleanDate(r['Tanggal Masuk']) || new Date().toISOString().slice(0, 10));
+    const masukTimes = assignSyntheticTimes(masukDateKeys, 7); // barang masuk: mulai jam 07:00
 
-    for (const r of masukRows) {
+    const productItems: any[] = masukRows.map((r, i) => {
       const name = cleanName(r['Nama Barang'])!;
-      const key = name.toLowerCase();
-      const qty = cleanQty(r['Qty']);
-      const buy = cleanMoney(r['Harga Modal']);
-      const sell = cleanMoney(r['Harga Jual']);
-      const expiry = cleanDate(r['Tanggal Expired']);
-      const receivedAt = cleanDate(r['Tanggal Masuk']) || new Date().toISOString().slice(0, 10);
-
-      if (!agg.has(key)) {
-        agg.set(key, { name, totalQty: 0, buy: 0, sell: 0, expiry: null, receivedAt });
-        order.push(key);
-      }
-      const a = agg.get(key)!;
-      a.totalQty += qty;
-      if (buy != null) a.buy = buy;
-      if (sell != null) a.sell = sell;
-      if (expiry) a.expiry = expiry;
-      if (receivedAt) a.receivedAt = receivedAt;
-    }
-
-    // Pencocokan produk terjual juga case-insensitive (huruf besar/kecil
-    // diabaikan) supaya nyambung dengan agregasi Barang Masuk di atas.
-    const terjualPerProduk = new Map<string, number>(); // key = nama huruf kecil
-    const terjualDisplayName = new Map<string, string>(); // key -> nama tampilan (kemunculan pertama)
-    for (const r of jualRows) {
-      const name = cleanName(r['Nama Produk'])!;
-      const key = name.toLowerCase();
-      const qty = cleanQty(r['Qty']);
-      terjualPerProduk.set(key, (terjualPerProduk.get(key) || 0) + qty);
-      if (!terjualDisplayName.has(key)) terjualDisplayName.set(key, name);
-    }
-
-    // Barang masuk diberi jam mulai 07:00 (pagi) supaya kalau tanggalnya sama
-    // dengan penjualan, barang masuk tetap terurut lebih dulu secara logis.
-    const productDateKeys = order.map((key) => agg.get(key)!.receivedAt);
-    const productTimes = assignSyntheticTimes(productDateKeys, 7);
-
-    const productItems: any[] = order.map((key, i) => {
-      const a = agg.get(key)!;
-      const terjual = terjualPerProduk.get(key) || 0;
-      const stokAwal = Math.max(0, a.totalQty - terjual);
+      masukSeenNames.add(name.toLowerCase());
       return {
-        name: a.name,
+        name,
         unit_type: 'pcs',
-        qty: stokAwal,
-        buy_price: a.buy || 0,
-        sell_price: a.sell || 0,
-        expiry_date: a.expiry,
-        received_at: productTimes[i],
+        qty: cleanQty(r['Qty']),
+        buy_price: cleanMoney(r['Harga Modal']) || 0,
+        sell_price: cleanMoney(r['Harga Jual']) || 0,
+        expiry_date: cleanDate(r['Tanggal Expired']),
+        received_at: masukTimes[i],
       };
     });
+
     // Produk yang tercatat terjual tapi tidak pernah ada riwayat masuk di data lama
-    for (const key of terjualPerProduk.keys()) {
-      if (!agg.has(key)) {
-        productItems.push({ name: terjualDisplayName.get(key), unit_type: 'pcs', qty: 0, buy_price: 0, sell_price: 0 });
+    // -> tetap dibuat (stok 0) supaya penjualannya bisa direkam & tidak hilang.
+    const terjualNamesSeen = new Set<string>();
+    for (const r of jualRows) {
+      const name = cleanName(r['Nama Produk']);
+      if (!name) continue;
+      const key = name.toLowerCase();
+      if (!terjualNamesSeen.has(key) && !masukSeenNames.has(key)) {
+        terjualNamesSeen.add(key);
+        productItems.push({ name, unit_type: 'pcs', qty: 0, buy_price: 0, sell_price: 0 });
       }
     }
 
-    const { data: productResult, error: productError } = await supabase.rpc('bulk_import_products', { p_items: productItems });
-    if (productError) return { ok: false, error: productError.message };
+    let productResult: any = { created_products: 0, created_batches: 0, skipped: [], already_imported: false };
+    if (productItems.length) {
+      const { data, error } = await supabase.rpc('bulk_import_products', { p_items: productItems });
+      if (error) return { ok: false, error: error.message };
+      productResult = data;
+    }
 
-    // ---------- 2. Import riwayat penjualan (baris asli, bukan agregat) ----------
+    // ---------- 2. Import riwayat penjualan (baris asli, memotong stok FIFO) ----------
     let salesResult: { created?: number; skipped?: any[]; already_imported?: boolean } | null = null;
     if (jualRows.length) {
-      // Nama pembeli yang kosong "diwariskan" dari baris terakhir yang ada
-      // namanya (baris tanpa nama = masih transaksi yang sama dgn baris di atasnya).
       let lastBuyer: string | null = null;
       const buyers = jualRows.map((r) => {
         const explicit = cleanName(r['Nama Pembeli']);
@@ -223,9 +196,8 @@ export async function importLegacyCsv(masukCsvText: string, jualCsvText: string)
         return explicit || lastBuyer;
       });
 
-      // Penjualan diberi jam mulai 09:00 (setelah barang masuk pagi itu).
       const saleDateKeys = jualRows.map((r) => cleanDate(r['Tanggal Keluar']));
-      const saleTimes = assignSyntheticTimes(saleDateKeys, 9);
+      const saleTimes = assignSyntheticTimes(saleDateKeys, 9); // penjualan: mulai jam 09:00
 
       const salesItems = jualRows
         .map((r, i) => ({
@@ -255,9 +227,11 @@ export async function importLegacyCsv(masukCsvText: string, jualCsvText: string)
 
     return {
       ok: true,
-      productsCreated: productResult.created,
+      productsCreated: productResult.created_products,
+      batchesCreated: productResult.created_batches,
       productsSkipped: productResult.skipped,
       productsTotal: productItems.length,
+      productsAlreadyImported: productResult.already_imported,
       salesCreated: salesResult?.created ?? 0,
       salesSkipped: salesResult?.skipped ?? [],
       salesTotal: jualRows.length,

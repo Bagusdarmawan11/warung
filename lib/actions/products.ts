@@ -265,3 +265,38 @@ export async function deleteProduct(productId: string): Promise<ActionResult<{ a
   revalidateAll();
   return { ok: true, data: { archived: false } };
 }
+
+export interface MergeProductsInput {
+  name: string;
+  category?: string;
+  unitType: UnitType;
+  lowStockThreshold: number;
+  qty: number;
+  buyPrice: number;
+  sellPrice: number;
+  expiryDate?: string | null;
+  sourceIds: string[];
+}
+
+/**
+ * Gabungkan beberapa produk (misal "Telur Ayam 1 Kg", "Telur Ayam 2 KG", dst)
+ * jadi SATU produk baru. Produk-produk lama diarsipkan (is_active=false),
+ * bukan dihapus, supaya riwayat transaksi & laporan lama tetap akurat.
+ */
+export async function mergeProducts(input: MergeProductsInput): Promise<ActionResult<Product>> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc('merge_products_into_new', {
+    p_name: input.name,
+    p_category: input.category || null,
+    p_unit_type: input.unitType,
+    p_low_stock_threshold: input.lowStockThreshold,
+    p_qty: input.qty,
+    p_buy_price: input.buyPrice,
+    p_sell_price: input.sellPrice,
+    p_expiry_date: input.expiryDate || null,
+    p_source_ids: input.sourceIds,
+  });
+  if (error) return { ok: false, error: friendlyError(error.message) };
+  revalidateAll();
+  return { ok: true, data: data as Product };
+}

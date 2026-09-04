@@ -4,12 +4,12 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   TrendingUp, Trophy, PackageSearch, Sparkles, Loader2, AlertTriangle,
-  LineChart as LineChartIcon, BarChart3, Boxes, Wallet, ArrowDownCircle, ArrowUpCircle,
+  LineChart as LineChartIcon, BarChart3, Boxes, Wallet, ArrowDownCircle, ArrowUpCircle, Crown,
 } from 'lucide-react';
 import { Card, Badge, EmptyState, ToggleGroup, Input } from '@/components/ui';
 import { TrendChartToggle } from '@/components/beranda/TrendChartToggle';
 import { BestSellerChart } from '@/components/beranda/BestSellerChart';
-import { aggregateByPeriod, bestSellers, restockPrediction, summarize } from '@/lib/analytics';
+import { aggregateByPeriod, bestSellers, restockPrediction, summarize, topBuyers } from '@/lib/analytics';
 import { getSalesHistory, getStockInHistory } from '@/lib/actions/sales';
 import { rupiah, formatTanggal, todayISO, daysUntil, startOfWeekISO, startOfMonthISO, startOfYearISO } from '@/lib/format';
 import type { SaleRow, StockInHistoryRow, ProductStockSummary } from '@/lib/types';
@@ -88,6 +88,7 @@ export function BerandaClient({
 
   const trend = useMemo(() => aggregateByPeriod(sales, period).map((t) => ({ label: t.label, omzet: t.omzet })), [sales, period]);
   const best = useMemo(() => bestSellers(sales, 8), [sales]);
+  const topCustomers = useMemo(() => topBuyers(sales, 8), [sales]);
   const restock = useMemo(() => restockPrediction(sales, products), [sales, products]);
   const totals120 = useMemo(() => summarize(sales), [sales]);
 
@@ -209,7 +210,7 @@ export function BerandaClient({
           <p className="whitespace-pre-line text-sm leading-relaxed text-ink">{aiState.text}</p>
         ) : aiState.reason === 'not_configured' ? (
           <p className="text-sm text-ink-soft">
-            Fitur ini butuh <code className="rounded bg-white/70 px-1 py-0.5 font-mono text-xs">ANTHROPIC_API_KEY</code> di environment variable. Lihat README bagian &quot;AI Insight&quot;.
+            Fitur ini butuh <code className="rounded bg-white/70 px-1 py-0.5 font-mono text-xs">GEMINI_API_KEY</code> di environment variable. Lihat README bagian &quot;AI Insight&quot;.
           </p>
         ) : (
           <p className="text-sm text-ink-soft">Minta AI merangkum kondisi bisnis 120 hari terakhir + rekomendasi tindakan, berdasarkan grafik &amp; data di halaman ini.</p>
@@ -225,6 +226,29 @@ export function BerandaClient({
       <Card className="mb-6">
         {best.length === 0 ? <EmptyState title="Belum ada penjualan" /> : <BestSellerChart data={best} />}
       </Card>
+
+      {/* Top pelanggan */}
+      <h2 className="mb-3 flex items-center gap-1.5 font-display text-base font-bold text-ink"><Crown size={17} className="text-butter-500" /> Top Pelanggan</h2>
+      {topCustomers.length === 0 ? (
+        <EmptyState title="Belum ada data pembeli" hint="Nama pembeli tercatat otomatis dari transaksi kasir & import." />
+      ) : (
+        <div className="mb-6 space-y-2">
+          {topCustomers.map((c, i) => (
+            <Card key={c.buyer_name} tight className="flex items-center gap-3">
+              <div className={`flex h-8 w-8 flex-none items-center justify-center rounded-full font-mono text-xs font-bold ${
+                i === 0 ? 'bg-butter-300 text-ink' : i === 1 ? 'bg-lilac-200 text-ink' : i === 2 ? 'bg-peach-200 text-ink' : 'bg-lilac-50 text-ink-soft'
+              }`}>
+                {i + 1}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-ink">{c.buyer_name}</p>
+                <p className="text-[11px] text-ink-soft">{c.jumlah_transaksi} transaksi &middot; terakhir {formatTanggal(c.terakhir_belanja.slice(0, 10))}</p>
+              </div>
+              <p className="flex-none font-mono text-sm font-bold text-peach-500">{rupiah(c.total_belanja)}</p>
+            </Card>
+          ))}
+        </div>
+      )}
 
       {/* Restock prediction */}
       <h2 className="mb-3 flex items-center gap-1.5 font-display text-base font-bold text-ink"><PackageSearch size={17} className="text-sky-500" /> Prediksi Kebutuhan Restock</h2>
