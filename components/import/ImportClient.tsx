@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { UploadCloud, FileSpreadsheet, CheckCircle2, AlertTriangle, Loader2, Info } from 'lucide-react';
-import { Card, Button, Field } from '@/components/ui';
+import { UploadCloud, FileSpreadsheet, CheckCircle2, AlertTriangle, Loader2, Info, PackagePlus, Receipt, ArrowRight } from 'lucide-react';
+import { Card } from '@/components/ui';
 import { importLegacyCsv, type ImportResult } from '@/lib/actions/import';
 
 function readFileAsText(file: File): Promise<string> {
@@ -21,12 +21,14 @@ export function ImportClient() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
 
+  const canImport = !!masukFile || !!jualFile;
+
   async function handleImport() {
-    if (!masukFile) { toast.error('Pilih dulu file Barang Masuk (.csv)'); return; }
+    if (!canImport) { toast.error('Pilih minimal satu file (Barang Masuk atau Penjualan)'); return; }
     setLoading(true);
     setResult(null);
     try {
-      const masukText = await readFileAsText(masukFile);
+      const masukText = masukFile ? await readFileAsText(masukFile) : '';
       const jualText = jualFile ? await readFileAsText(jualFile) : '';
       const res = await importLegacyCsv(masukText, jualText);
       setResult(res);
@@ -40,101 +42,162 @@ export function ImportClient() {
   }
 
   return (
-    <div className="animate-slide-up">
-      <div className="mb-5">
+    <div className="mx-auto max-w-xl animate-slide-up">
+      <div className="mb-6 text-center">
+        <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-3xl bg-gradient-to-br from-peach-400 to-lilac-400 text-white shadow-pop">
+          <UploadCloud size={24} />
+        </div>
         <h1 className="font-display text-2xl font-extrabold text-ink">Import Data Lama</h1>
-        <p className="text-sm text-ink-soft">Upload file CSV Barang Masuk &amp; Penjualan dari catatan lama kamu — langsung dari browser, tanpa perlu komputer/terminal.</p>
+        <p className="mx-auto mt-1 max-w-sm text-sm text-ink-soft">
+          Upload catatan lama kamu langsung dari browser — tidak perlu komputer atau terminal.
+        </p>
       </div>
 
-      <Card className="mb-4">
-        <FileField label="File Barang Masuk (.csv) — wajib" file={masukFile} onChange={setMasukFile} />
-        <FileField label="File Penjualan (.csv) — opsional, akan tercatat sebagai riwayat transaksi" file={jualFile} onChange={setJualFile} />
-        <Button full disabled={loading || !masukFile} onClick={handleImport}>
-          {loading ? <Loader2 size={16} className="animate-spin" /> : <UploadCloud size={16} />}
+      <Card className="mb-4 !p-4 sm:!p-5">
+        <FileDropField
+          icon={<PackagePlus size={18} />}
+          title="Barang Masuk"
+          hint="Data stok & harga produk"
+          file={masukFile}
+          onChange={setMasukFile}
+          accent="mint"
+        />
+        <div className="my-3 flex items-center gap-3">
+          <div className="h-px flex-1 bg-lilac-100" />
+          <span className="text-[10px] font-bold uppercase tracking-wide text-ink-soft/60">dan / atau</span>
+          <div className="h-px flex-1 bg-lilac-100" />
+        </div>
+        <FileDropField
+          icon={<Receipt size={18} />}
+          title="Penjualan"
+          hint="Jadi riwayat transaksi"
+          file={jualFile}
+          onChange={setJualFile}
+          accent="peach"
+        />
+
+        <button
+          onClick={handleImport}
+          disabled={loading || !canImport}
+          className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-peach-400 to-peach-500 py-3.5 text-sm font-bold text-white shadow-soft transition active:scale-[0.98] disabled:opacity-40"
+        >
+          {loading ? <Loader2 size={17} className="animate-spin" /> : <ArrowRight size={17} />}
           {loading ? 'Memproses...' : 'Mulai Import'}
-        </Button>
-        <p className="mt-3 text-[11px] text-ink-soft">
-          Semua produk hasil import dibuat sebagai satuan <b>pcs</b>. Produk timbangan (telur, kemiri, lada, dll) sebaiknya
-          ditambahkan ulang manual lewat menu <b>Barang Masuk → Produk Baru</b> dengan satuan gram. Produk yang namanya sudah
-          ada di sistem akan otomatis dilewati (tidak dibuat dobel) — aman kalau kamu tidak sengaja import file Barang Masuk 2 kali.
-          Riwayat penjualan juga otomatis diproteksi dari dobel — kalau sebelumnya sudah pernah berhasil diimpor, percobaan
-          berikutnya akan otomatis dilewati (lihat catatan di bawah kalau ini terjadi).
-        </p>
+        </button>
+
+        <div className="mt-4 flex items-start gap-2 rounded-xl bg-lilac-50/70 p-3">
+          <Info size={14} className="mt-0.5 flex-none text-lilac-400" />
+          <p className="text-[11px] leading-relaxed text-ink-soft">
+            Cukup upload salah satu kalau memang cuma itu yang kamu punya. Semua produk hasil import jadi satuan <b>pcs</b> —
+            produk timbangan (telur, kemiri, dll) tambahkan ulang manual di <b>Barang Masuk → Produk Baru</b> dengan satuan gram.
+            Produk & riwayat yang sudah pernah masuk otomatis dilewati, aman kalau tidak sengaja import dobel.
+          </p>
+        </div>
       </Card>
 
-      {result && (
-        <div className="space-y-3">
-          {!result.ok ? (
-            <Card className="!border-rose-200">
-              <div className="flex items-center gap-2 text-rose-500">
-                <AlertTriangle size={18} />
-                <p className="font-semibold">{result.error}</p>
+      {result && <ResultCard result={result} />}
+    </div>
+  );
+}
+
+function FileDropField({
+  icon,
+  title,
+  hint,
+  file,
+  onChange,
+  accent,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  hint: string;
+  file: File | null;
+  onChange: (f: File | null) => void;
+  accent: 'mint' | 'peach';
+}) {
+  const accentClasses = accent === 'mint'
+    ? { icon: 'bg-mint-100 text-mint-600', border: 'border-mint-300', bg: 'bg-mint-50/60' }
+    : { icon: 'bg-peach-100 text-peach-500', border: 'border-peach-300', bg: 'bg-peach-50/60' };
+
+  return (
+    <label
+      className={`flex cursor-pointer items-center gap-3 rounded-2xl border-2 border-dashed px-4 py-3.5 transition ${
+        file ? `${accentClasses.border} ${accentClasses.bg}` : 'border-lilac-200 bg-lilac-50/40 hover:border-lilac-300'
+      }`}
+    >
+      <div className={`flex h-10 w-10 flex-none items-center justify-center rounded-xl ${file ? accentClasses.icon : 'bg-lilac-100 text-ink-soft'}`}>
+        {file ? <CheckCircle2 size={18} /> : icon}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-bold text-ink">{title} <span className="font-normal text-ink-soft/60">(opsional)</span></p>
+        <p className="truncate text-xs text-ink-soft">{file ? file.name : hint}</p>
+      </div>
+      <span className="flex-none rounded-lg bg-white px-2.5 py-1.5 text-[11px] font-bold text-ink-soft shadow-soft">
+        {file ? 'Ganti' : 'Pilih'}
+      </span>
+      <input type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => onChange(e.target.files?.[0] || null)} />
+    </label>
+  );
+}
+
+function ResultCard({ result }: { result: ImportResult }) {
+  if (!result.ok) {
+    return (
+      <Card className="!border-rose-200 animate-pop-in">
+        <div className="flex items-center gap-2 text-rose-500">
+          <AlertTriangle size={18} />
+          <p className="font-semibold">{result.error}</p>
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="animate-pop-in space-y-3">
+      {result.productsTotal ? (
+        <Card className="!border-mint-200">
+          <div className="mb-3 flex items-center gap-2 text-mint-600">
+            <CheckCircle2 size={18} />
+            <p className="font-bold">Produk: {result.productsCreated} dari {result.productsTotal} berhasil dibuat baru</p>
+          </div>
+          {!!result.productsSkipped?.length && (
+            <SkippedList title={`Dilewati (${result.productsSkipped.length}) — biasanya karena produk dengan nama ini sudah ada:`} items={result.productsSkipped} />
+          )}
+        </Card>
+      ) : null}
+
+      {result.salesTotal ? (
+        <Card className={result.salesAlreadyImported ? '!border-butter-300' : '!border-mint-200'}>
+          {result.salesAlreadyImported ? (
+            <div className="flex items-start gap-2 text-butter-500">
+              <Info size={18} className="mt-0.5 flex-none" />
+              <div>
+                <p className="font-bold text-ink">Riwayat penjualan dilewati</p>
+                <p className="mt-1 text-xs text-ink-soft">
+                  Sistem mendeteksi riwayat hasil import SEBELUMNYA sudah ada, jadi file ini tidak diproses lagi (mencegah data dobel).
+                  Kalau memang perlu impor ulang dari nol, jalankan <code className="rounded bg-white/60 px-1">supabase/scripts/reset_data.sql</code> dulu.
+                </p>
               </div>
-            </Card>
+            </div>
           ) : (
             <>
-              {/* Hasil produk / barang masuk */}
-              <Card className="!border-mint-200">
-                <div className="mb-3 flex items-center gap-2 text-mint-600">
-                  <CheckCircle2 size={18} />
-                  <p className="font-bold">
-                    Produk: {result.productsCreated} dari {result.productsTotal} berhasil dibuat baru
-                  </p>
-                </div>
-                {!!result.productsSkipped?.length && (
-                  <SkippedList title={`Dilewati (${result.productsSkipped.length}) — biasanya karena produk dengan nama ini sudah ada:`} items={result.productsSkipped} />
-                )}
-              </Card>
-
-              {/* Hasil riwayat penjualan */}
-              {result.salesTotal ? (
-                <Card className={result.salesAlreadyImported ? '!border-butter-300' : '!border-mint-200'}>
-                  {result.salesAlreadyImported ? (
-                    <div className="flex items-start gap-2 text-butter-500">
-                      <Info size={18} className="mt-0.5 flex-none" />
-                      <div>
-                        <p className="font-bold text-ink">Riwayat penjualan dilewati</p>
-                        <p className="mt-1 text-xs text-ink-soft">
-                          Sistem mendeteksi riwayat penjualan hasil import SEBELUMNYA sudah ada di database, jadi file ini
-                          tidak diproses lagi (mencegah data dobel). Kalau memang belum pernah berhasil masuk sebelumnya dan
-                          ini murni percobaan pertama, cek menu Riwayat → Penjualan dulu. Kalau memang perlu impor ulang dari
-                          nol, hapus baris lama di Supabase (Table Editor → tabel <code className="rounded bg-white/60 px-1">sales</code>,
-                          cari baris dengan trx_id berawalan <code className="rounded bg-white/60 px-1">LEGACY-IMPORT-</code>) baru coba lagi.
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="mb-3 flex items-center gap-2 text-mint-600">
-                        <CheckCircle2 size={18} />
-                        <p className="font-bold">
-                          Riwayat Penjualan: {result.salesCreated} dari {result.salesTotal} baris berhasil dicatat
-                        </p>
-                      </div>
-                      {!!result.salesSkipped?.length && (
-                        <SkippedList title={`Dilewati (${result.salesSkipped.length}):`} items={result.salesSkipped} />
-                      )}
-                    </>
-                  )}
-                </Card>
-              ) : (
-                masukFile && !jualFile && (
-                  <Card className="!border-lilac-200">
-                    <div className="flex items-center gap-2 text-ink-soft">
-                      <Info size={16} />
-                      <p className="text-xs">Tidak ada file Penjualan yang diupload, jadi tidak ada riwayat transaksi yang dibuat — hanya data produk & stok.</p>
-                    </div>
-                  </Card>
-                )
+              <div className="mb-3 flex items-center gap-2 text-mint-600">
+                <CheckCircle2 size={18} />
+                <p className="font-bold">Riwayat Penjualan: {result.salesCreated} dari {result.salesTotal} baris berhasil dicatat</p>
+              </div>
+              {!!result.salesSkipped?.length && (
+                <SkippedList title={`Dilewati (${result.salesSkipped.length}):`} items={result.salesSkipped} />
               )}
-
-              <a href="/produk" className="inline-block text-xs font-bold text-peach-500 hover:underline">Lihat Daftar Barang →</a>
-              {' '}
-              <a href="/riwayat" className="inline-block text-xs font-bold text-peach-500 hover:underline">Lihat Riwayat Penjualan →</a>
             </>
           )}
-        </div>
-      )}
+        </Card>
+      ) : null}
+
+      <div className="flex flex-wrap items-center gap-2 pt-1">
+        <a href="/produk" className="inline-flex items-center gap-1 text-xs font-bold text-peach-500 hover:underline">Lihat Daftar Barang <ArrowRight size={12} /></a>
+        <span className="text-ink-soft/30">&middot;</span>
+        <a href="/riwayat" className="inline-flex items-center gap-1 text-xs font-bold text-peach-500 hover:underline">Lihat Riwayat Penjualan <ArrowRight size={12} /></a>
+      </div>
     </div>
   );
 }
@@ -153,17 +216,5 @@ function SkippedList({ title, items }: { title: string; items: { name: string; r
         ))}
       </div>
     </div>
-  );
-}
-
-function FileField({ label, file, onChange }: { label: string; file: File | null; onChange: (f: File | null) => void }) {
-  return (
-    <Field label={label}>
-      <label className="flex cursor-pointer items-center gap-3 rounded-xl border-2 border-dashed border-lilac-200 bg-lilac-50/50 px-4 py-3.5 transition hover:border-peach-300">
-        <FileSpreadsheet size={20} className={file ? 'text-mint-500' : 'text-ink-soft'} />
-        <span className="flex-1 truncate text-sm text-ink-soft">{file ? file.name : 'Ketuk untuk pilih file .csv'}</span>
-        <input type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => onChange(e.target.files?.[0] || null)} />
-      </label>
-    </Field>
   );
 }

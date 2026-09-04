@@ -134,8 +134,8 @@ export async function importLegacyCsv(masukCsvText: string, jualCsvText: string)
     const masukRows = readCsvAsObjects(masukCsvText, 3).filter((r) => cleanName(r['Nama Barang']));
     const jualRows = jualCsvText.trim() ? readCsvAsObjects(jualCsvText, 3).filter((r) => cleanName(r['Nama Produk'])) : [];
 
-    if (!masukRows.length) {
-      return { ok: false, error: 'File Barang Masuk kosong atau formatnya tidak dikenali. Pastikan ini file CSV export dari template yang sama.' };
+    if (!masukRows.length && !jualRows.length) {
+      return { ok: false, error: 'Upload minimal salah satu file (Barang Masuk atau Penjualan) dengan format yang sesuai.' };
     }
 
     // ---------- 1. Agregasi Barang Masuk -> daftar produk + stok awal ----------
