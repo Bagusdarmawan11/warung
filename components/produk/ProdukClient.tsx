@@ -283,7 +283,7 @@ function ProductRow({
       )}
 
       <div className="min-w-0 flex-1">
-        <p className="truncate font-semibold text-ink">{p.name}</p>
+        <p className="font-semibold leading-snug text-ink">{p.name}</p>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[11px] text-ink-soft">
           <span>{p.code}</span>
           <span>&middot;</span>

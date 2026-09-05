@@ -266,9 +266,9 @@ function RestockForm() {
               <button
                 key={p.product_id}
                 onClick={() => { setPicked(p); setResults([]); setSearch(p.name); }}
-                className="flex w-full items-center justify-between border-t border-lilac-100 px-3 py-2.5 text-left text-sm first:border-t-0 hover:bg-lilac-50"
+                className="flex w-full flex-col items-start gap-0.5 border-t border-lilac-100 px-3 py-2.5 text-left text-sm first:border-t-0 hover:bg-lilac-50"
               >
-                <span className="font-medium">{p.name}</span>
+                <span className="font-medium leading-snug text-ink">{p.name}</span>
                 <span className="font-mono text-[11px] text-ink-soft">{p.code} &middot; stok {formatQty(p.stok, p.unit_type)}</span>
               </button>
             ))}

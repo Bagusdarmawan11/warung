@@ -241,10 +241,12 @@ export function KasirClient() {
                 className="flex w-full items-center gap-2.5 border-t border-lilac-100 px-3 py-2.5 text-left text-sm first:border-t-0 hover:bg-lilac-50"
               >
                 <Thumb url={p.image_url} onClick={() => setLightbox(p.image_url)} size="h-8 w-8" />
-                <span className="flex-1 truncate font-medium text-ink">{p.name}</span>
-                <span className="flex-none font-mono text-[11px] text-ink-soft">
-                  {p.code} &middot; {rupiah(p.harga_jual_aktif)} &middot; stok {formatQty(p.stok, p.unit_type)}
-                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium leading-snug text-ink">{p.name}</p>
+                  <p className="font-mono text-[11px] text-ink-soft">
+                    {p.code} &middot; {rupiah(p.harga_jual_aktif)} &middot; stok {formatQty(p.stok, p.unit_type)}
+                  </p>
+                </div>
               </button>
             ))}
           </div>
@@ -271,54 +273,63 @@ export function KasirClient() {
 
           <div className="mb-4 space-y-2">
             {cart.map((item) => (
-              <div key={item.product_id} className="flex items-center gap-2 rounded-2xl border border-lilac-100 bg-white p-2.5 shadow-soft">
-                <Thumb url={item.image_url} onClick={() => setLightbox(item.image_url)} />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-ink">{item.name}</p>
-                  <div className="flex items-center gap-1 text-[11px] text-ink-soft">
-                    <span className="font-mono">{item.code}</span>
-                    <span>&middot;</span>
-                    <input
-                      type="number"
-                      value={item.unit_type === 'gram' ? pricePerKgFromPerGram(item.unit_price) : item.unit_price}
-                      onChange={(e) => {
-                        const v = parseFloat(e.target.value) || 0;
-                        setUnitPrice(item.product_id, item.unit_type === 'gram' ? pricePerGramFromPerKg(v) : v);
-                      }}
-                      className="w-20 rounded border border-lilac-200 bg-lilac-50/60 px-1 py-0.5 font-mono text-[11px]"
-                    />
-                    <span>/{item.unit_type === 'gram' ? 'kg' : 'pcs'}</span>
-                    {item.qty > item.stok_tersedia && <span className="font-bold text-rose-500">stok {formatQty(item.stok_tersedia, item.unit_type)}</span>}
+              <div key={item.product_id} className="rounded-2xl border border-lilac-100 bg-white p-3 shadow-soft">
+                <div className="flex items-start gap-2.5">
+                  <Thumb url={item.image_url} onClick={() => setLightbox(item.image_url)} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold leading-snug text-ink">{item.name}</p>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-ink-soft">
+                      <span className="font-mono">{item.code}</span>
+                      <span>&middot;</span>
+                      <span className="inline-flex items-center gap-1">
+                        <input
+                          type="number"
+                          value={item.unit_type === 'gram' ? pricePerKgFromPerGram(item.unit_price) : item.unit_price}
+                          onChange={(e) => {
+                            const v = parseFloat(e.target.value) || 0;
+                            setUnitPrice(item.product_id, item.unit_type === 'gram' ? pricePerGramFromPerKg(v) : v);
+                          }}
+                          className="w-16 rounded border border-lilac-200 bg-lilac-50/60 px-1 py-0.5 font-mono text-[11px]"
+                        />
+                        <span>/{item.unit_type === 'gram' ? 'kg' : 'pcs'}</span>
+                      </span>
+                      {item.qty > item.stok_tersedia && (
+                        <span className="rounded-full bg-rose-100 px-1.5 py-0.5 font-bold text-rose-500">
+                          stok {formatQty(item.stok_tersedia, item.unit_type)}
+                        </span>
+                      )}
+                    </div>
                   </div>
+                  <button onClick={() => removeFromCart(item.product_id)} className="flex h-7 w-7 flex-none items-center justify-center rounded-lg bg-rose-100 text-rose-500">
+                    <Trash2 size={13} />
+                  </button>
                 </div>
 
-                {item.unit_type === 'pcs' ? (
-                  <div className="flex flex-none items-center gap-1.5">
-                    <button onClick={() => changeQty(item.product_id, -1)} className="flex h-7 w-7 items-center justify-center rounded-lg bg-lilac-100 text-ink"><Minus size={13} /></button>
-                    <input
-                      type="number"
-                      value={item.qty}
-                      onChange={(e) => setQtyDirect(item.product_id, parseInt(e.target.value) || 1)}
-                      className="w-11 rounded-lg border border-lilac-200 py-1 text-center font-mono text-sm"
-                    />
-                    <button onClick={() => changeQty(item.product_id, 1)} className="flex h-7 w-7 items-center justify-center rounded-lg bg-lilac-100 text-ink"><Plus size={13} /></button>
-                  </div>
-                ) : (
-                  <div className="flex flex-none items-center gap-1">
-                    <input
-                      type="number"
-                      value={item.qty}
-                      onChange={(e) => setQtyDirect(item.product_id, parseFloat(e.target.value) || 0.1)}
-                      className="w-16 rounded-lg border border-lilac-200 py-1 text-center font-mono text-sm"
-                    />
-                    <span className="text-[11px] font-semibold text-ink-soft">gr</span>
-                  </div>
-                )}
-
-                <div className="w-20 flex-none text-right font-mono text-sm font-bold text-ink">{rupiah(item.qty * item.unit_price)}</div>
-                <button onClick={() => removeFromCart(item.product_id)} className="flex h-7 w-7 flex-none items-center justify-center rounded-lg bg-rose-100 text-rose-500">
-                  <Trash2 size={13} />
-                </button>
+                <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-lilac-50 pt-2.5">
+                  {item.unit_type === 'pcs' ? (
+                    <div className="flex flex-none items-center gap-1.5">
+                      <button onClick={() => changeQty(item.product_id, -1)} className="flex h-7 w-7 items-center justify-center rounded-lg bg-lilac-100 text-ink"><Minus size={13} /></button>
+                      <input
+                        type="number"
+                        value={item.qty}
+                        onChange={(e) => setQtyDirect(item.product_id, parseInt(e.target.value) || 1)}
+                        className="w-11 rounded-lg border border-lilac-200 py-1 text-center font-mono text-sm"
+                      />
+                      <button onClick={() => changeQty(item.product_id, 1)} className="flex h-7 w-7 items-center justify-center rounded-lg bg-lilac-100 text-ink"><Plus size={13} /></button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-none items-center gap-1">
+                      <input
+                        type="number"
+                        value={item.qty}
+                        onChange={(e) => setQtyDirect(item.product_id, parseFloat(e.target.value) || 0.1)}
+                        className="w-16 rounded-lg border border-lilac-200 py-1 text-center font-mono text-sm"
+                      />
+                      <span className="text-[11px] font-semibold text-ink-soft">gr</span>
+                    </div>
+                  )}
+                  <div className="flex-none font-mono text-sm font-bold text-ink">{rupiah(item.qty * item.unit_price)}</div>
+                </div>
               </div>
             ))}
           </div>

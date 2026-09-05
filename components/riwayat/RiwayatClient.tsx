@@ -130,7 +130,7 @@ export function RiwayatClient({
                   <Card tight className="flex items-center gap-3 transition hover:border-peach-200">
                     <span className="w-6 flex-none text-center font-mono text-[11px] text-ink-soft">{(pageSafe - 1) * PAGE_SIZE + idx + 1}</span>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-ink">{r.product_name_snapshot}</p>
+                      <p className="font-semibold leading-snug text-ink">{r.product_name_snapshot}</p>
                       <p className="truncate text-[11px] text-ink-soft">{formatTanggalWaktu(r.sold_at)} {r.buyer_name ? `· ${r.buyer_name}` : ''}</p>
                     </div>
                     <div className="flex-none text-right">
@@ -151,7 +151,7 @@ export function RiwayatClient({
             <Card key={r.id} tight className="flex items-center gap-3">
               <span className="w-6 flex-none text-center font-mono text-[11px] text-ink-soft">{(pageSafe - 1) * PAGE_SIZE + idx + 1}</span>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-ink">{r.product_name_snapshot}</p>
+                <p className="font-semibold leading-snug text-ink">{r.product_name_snapshot}</p>
                 <p className="text-[11px] text-ink-soft">{formatTanggal(r.received_at)}</p>
               </div>
               <div className="flex-none text-right">
