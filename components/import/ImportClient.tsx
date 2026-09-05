@@ -20,6 +20,7 @@ function readFileAsText(file: File): Promise<string> {
 export function ImportClient() {
   const [masukFile, setMasukFile] = useState<File | null>(null);
   const [jualFile, setJualFile] = useState<File | null>(null);
+  const [gramNames, setGramNames] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
 
@@ -32,7 +33,7 @@ export function ImportClient() {
     try {
       const masukText = masukFile ? await readFileAsText(masukFile) : '';
       const jualText = jualFile ? await readFileAsText(jualFile) : '';
-      const res = await importLegacyCsv(masukText, jualText);
+      const res = await importLegacyCsv(masukText, jualText, gramNames);
       setResult(res);
       if (res.ok) toast.success('Import selesai');
       else toast.error(res.error || 'Import gagal');
@@ -85,6 +86,24 @@ export function ImportClient() {
           onChange={setJualFile}
           accent="peach"
         />
+
+        <div className="mt-4">
+          <label className="mb-1.5 block text-xs font-bold text-ink-soft">
+            Nama produk satuan timbangan/gram (opsional)
+          </label>
+          <textarea
+            value={gramNames}
+            onChange={(e) => setGramNames(e.target.value)}
+            placeholder={'Contoh:\nTelur Ayam\nKemiri\nLada'}
+            rows={3}
+            className="w-full rounded-xl border border-lilac-200 bg-lilac-50/40 px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-soft/40 outline-none focus:border-peach-400 focus:bg-white focus:ring-2 focus:ring-peach-100"
+          />
+          <p className="mt-1.5 text-[11px] leading-relaxed text-ink-soft">
+            Tulis nama produk (satu per baris atau pisah koma) yang di file CSV kamu ditulis pakai satuan <b>gram</b> di kolom Qty
+            (misal 1000 = 1kg) dan harga per <b>kilogram</b> — sistem otomatis membuatnya jadi produk timbangan dan mengonversi harganya.
+            Nama harus PERSIS sama dengan yang ada di file CSV (besar/kecil huruf tidak masalah).
+          </p>
+        </div>
 
         <button
           onClick={handleImport}

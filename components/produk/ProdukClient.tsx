@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { Search, Boxes, Plus, UploadCloud, X, Trash2, Download, Combine, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Card, Input, Chip, Badge, Button, EmptyState } from '@/components/ui';
@@ -15,13 +16,20 @@ import { rupiah, formatTanggal, formatQty, daysUntil } from '@/lib/format';
 import type { ProductStockSummary } from '@/lib/types';
 import Link from 'next/link';
 
-type StatusFilter = 'all' | 'menipis' | 'habis' | 'expired';
+type StatusFilter = 'all' | 'menipis' | 'habis' | 'bermasalah' | 'expired';
 const PAGE_SIZE = 20;
 
 export function ProdukClient({ initialProducts }: { initialProducts: ProductStockSummary[] }) {
+  const searchParams = useSearchParams();
+  const initialStatus = (searchParams.get('status') as StatusFilter) || 'all';
+  const initialDays = Number(searchParams.get('days')) || 30;
+
   const [products, setProducts] = useState(initialProducts);
   const [search, setSearch] = useState('');
-  const [status, setStatus] = useState<StatusFilter>('all');
+  const [status, setStatus] = useState<StatusFilter>(
+    ['all', 'menipis', 'habis', 'bermasalah', 'expired'].includes(initialStatus) ? initialStatus : 'all'
+  );
+  const [expiryDays, setExpiryDays] = useState(initialDays > 0 ? initialDays : 30);
   const [page, setPage] = useState(1);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -44,9 +52,10 @@ export function ProdukClient({ initialProducts }: { initialProducts: ProductStoc
     }
     if (status === 'menipis') list = list.filter((p) => p.stok > 0 && p.stok <= p.low_stock_threshold);
     else if (status === 'habis') list = list.filter((p) => p.stok <= 0);
-    else if (status === 'expired') list = list.filter((p) => { const d = daysUntil(p.kadaluwarsa_terdekat); return d !== null && d <= 30; });
+    else if (status === 'bermasalah') list = list.filter((p) => p.stok <= 0 || (p.stok > 0 && p.stok <= p.low_stock_threshold));
+    else if (status === 'expired') list = list.filter((p) => { const d = daysUntil(p.kadaluwarsa_terdekat); return d !== null && d <= expiryDays; });
     return [...list].sort((a, b) => a.name.localeCompare(b.name, 'id'));
-  }, [products, search, status]);
+  }, [products, search, status, expiryDays]);
 
   useEffect(() => { setPage(1); }, [search, status]);
 
@@ -147,10 +156,20 @@ export function ProdukClient({ initialProducts }: { initialProducts: ProductStoc
           </div>
           <div className="mb-4 flex gap-2 overflow-x-auto no-scrollbar">
             <Chip active={status === 'all'} onClick={() => setStatus('all')}>Semua</Chip>
+            <Chip active={status === 'bermasalah'} onClick={() => setStatus('bermasalah')}>Stok Bermasalah</Chip>
             <Chip active={status === 'menipis'} onClick={() => setStatus('menipis')}>Stok Menipis</Chip>
             <Chip active={status === 'habis'} onClick={() => setStatus('habis')}>Stok Habis</Chip>
             <Chip active={status === 'expired'} onClick={() => setStatus('expired')}>Segera Kadaluwarsa</Chip>
           </div>
+          {status === 'expired' && (
+            <div className="mb-4 flex gap-2 overflow-x-auto no-scrollbar">
+              {[30, 90, 180, 365].map((d) => (
+                <Chip key={d} active={expiryDays === d} onClick={() => setExpiryDays(d)}>
+                  {d === 30 ? '1 Bulan' : d === 90 ? '3 Bulan' : d === 180 ? '6 Bulan' : '1 Tahun'}
+                </Chip>
+              ))}
+            </div>
+          )}
         </>
       )}
 

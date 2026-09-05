@@ -32,7 +32,15 @@ export async function POST(req: Request) {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 900, temperature: 0.6 },
+          generationConfig: {
+            maxOutputTokens: 3000,
+            temperature: 0.6,
+            // Gemini 2.5 Flash punya mode "thinking" bawaan yang diam-diam
+            // memakai sebagian besar jatah token untuk "mikir" sebelum
+            // menulis jawaban - kalau tidak dimatikan, jawaban yang terlihat
+            // sering kepotong pendek walau maxOutputTokens sudah besar.
+            thinkingConfig: { thinkingBudget: 0 },
+          },
         }),
       }
     );
@@ -44,14 +52,15 @@ export async function POST(req: Request) {
     }
 
     const data = await res.json();
-    const text = (data.candidates?.[0]?.content?.parts || [])
+    const candidate = data.candidates?.[0];
+    const text = (candidate?.content?.parts || [])
       .map((p: any) => p.text || '')
       .filter(Boolean)
-      .join('\n');
+      .join('\n')
+      .trim();
 
     if (!text) {
-      // Kemungkinan diblok oleh safety filter atau alasan lain
-      const blockReason = data.candidates?.[0]?.finishReason || data.promptFeedback?.blockReason;
+      const blockReason = candidate?.finishReason || data.promptFeedback?.blockReason;
       console.error('Gemini returned no text. finishReason/blockReason:', blockReason);
       return NextResponse.json({ ok: false, reason: 'empty_response' }, { status: 502 });
     }
@@ -64,10 +73,21 @@ export async function POST(req: Request) {
 }
 
 function buildPrompt(stats: any): string {
-  return `Kamu adalah asisten analisis bisnis untuk sebuah warung sembako kecil di Indonesia. Berdasarkan data ringkasan (BUKAN data mentah) berikut, tulis dalam Bahasa Indonesia yang santai tapi jelas:
-1. Ringkasan kondisi bisnis 2-3 kalimat.
-2. 3-5 rekomendasi tindakan konkret dan singkat (poin-poin).
-Jangan mengarang angka yang tidak ada di data. Jawab maksimal sekitar 200 kata, tanpa heading markdown berlebihan.
+  return `Kamu adalah konsultan bisnis untuk sebuah warung sembako kecil di Indonesia. Berdasarkan data ringkasan (BUKAN data mentah) di bawah, tulis analisis dalam Bahasa Indonesia yang jelas dan enak dibaca, dengan struktur PERSIS seperti ini (pakai heading tebal seperti contoh, jangan pakai simbol markdown # atau tabel):
+
+**Kesimpulan Penjualan**
+2-4 kalimat merangkum kondisi bisnis: tren omzet naik/turun, produk yang menonjol, dan hal penting lain dari data.
+
+**Saran**
+3-4 poin saran praktis berdasarkan pola yang terlihat di data (misal soal stok, harga, atau produk tertentu).
+
+**Rekomendasi Tindakan**
+3-5 poin tindakan KONKRET dan spesifik yang bisa langsung dilakukan pemilik warung minggu ini (bukan saran umum/generik).
+
+Aturan penting:
+- Jangan mengarang angka yang tidak ada di data.
+- Sebut nama produk/angka spesifik dari data kalau relevan, supaya terasa personal (bukan template generik).
+- Total tulisan sekitar 200-300 kata, bahasa santai tapi profesional, tanpa basa-basi pembuka seperti "Tentu, berikut...".
 
 DATA:
 ${JSON.stringify(stats, null, 2)}`;

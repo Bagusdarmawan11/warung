@@ -134,7 +134,7 @@ export interface ImportResult {
  *    historis akurat. Nama pembeli yang kosong otomatis "diwariskan" dari
  *    baris terakhir yang ada namanya.
  */
-export async function importLegacyCsv(masukCsvText: string, jualCsvText: string): Promise<ImportResult> {
+export async function importLegacyCsv(masukCsvText: string, jualCsvText: string, gramProductNamesRaw: string = ''): Promise<ImportResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: 'Kamu harus login untuk melakukan import.' };
@@ -147,6 +147,20 @@ export async function importLegacyCsv(masukCsvText: string, jualCsvText: string)
       return { ok: false, error: 'Upload minimal salah satu file (Barang Masuk atau Penjualan) dengan format yang sesuai.' };
     }
 
+    // Nama produk yang harus dianggap satuan GRAM (timbangan), bukan pcs.
+    // Untuk produk ini, kolom Qty di CSV dibaca sebagai GRAM langsung (misal
+    // 1000 = 1 kg), dan kolom harga dianggap harga per KILOGRAM (dikonversi
+    // otomatis jadi per-gram untuk disimpan).
+    const gramNames = new Set(
+      gramProductNamesRaw
+        .split(/[\n,]/)
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean)
+    );
+    function isGramProduct(name: string): boolean {
+      return gramNames.has(name.toLowerCase());
+    }
+
     // ---------- 1. Barang Masuk: satu item per BARIS (bukan digabung) ----------
     const masukSeenNames = new Set<string>(); // buat deteksi produk "terjual tapi tidak pernah masuk"
     const masukDateKeys = masukRows.map((r) => cleanDate(r['Tanggal Masuk']) || new Date().toISOString().slice(0, 10));
@@ -155,12 +169,15 @@ export async function importLegacyCsv(masukCsvText: string, jualCsvText: string)
     const productItems: any[] = masukRows.map((r, i) => {
       const name = cleanName(r['Nama Barang'])!;
       masukSeenNames.add(name.toLowerCase());
+      const gram = isGramProduct(name);
+      const buy = cleanMoney(r['Harga Modal']) || 0;
+      const sell = cleanMoney(r['Harga Jual']) || 0;
       return {
         name,
-        unit_type: 'pcs',
+        unit_type: gram ? 'gram' : 'pcs',
         qty: cleanQty(r['Qty']),
-        buy_price: cleanMoney(r['Harga Modal']) || 0,
-        sell_price: cleanMoney(r['Harga Jual']) || 0,
+        buy_price: gram ? buy / 1000 : buy,
+        sell_price: gram ? sell / 1000 : sell,
         expiry_date: cleanDate(r['Tanggal Expired']),
         received_at: masukTimes[i],
       };
@@ -175,7 +192,7 @@ export async function importLegacyCsv(masukCsvText: string, jualCsvText: string)
       const key = name.toLowerCase();
       if (!terjualNamesSeen.has(key) && !masukSeenNames.has(key)) {
         terjualNamesSeen.add(key);
-        productItems.push({ name, unit_type: 'pcs', qty: 0, buy_price: 0, sell_price: 0 });
+        productItems.push({ name, unit_type: isGramProduct(name) ? 'gram' : 'pcs', qty: 0, buy_price: 0, sell_price: 0 });
       }
     }
 
@@ -200,14 +217,20 @@ export async function importLegacyCsv(masukCsvText: string, jualCsvText: string)
       const saleTimes = assignSyntheticTimes(saleDateKeys, 9); // penjualan: mulai jam 09:00
 
       const salesItems = jualRows
-        .map((r, i) => ({
-          product_name: cleanName(r['Nama Produk']),
-          qty: cleanQty(r['Qty']),
-          unit_price: cleanMoney(r['Harga Jual']) || 0,
-          unit_cost: cleanMoney(r['Harga Modal']) || 0,
-          buyer_name: buyers[i],
-          sold_at: saleTimes[i],
-        }))
+        .map((r, i) => {
+          const name = cleanName(r['Nama Produk']) || '';
+          const gram = isGramProduct(name);
+          const price = cleanMoney(r['Harga Jual']) || 0;
+          const cost = cleanMoney(r['Harga Modal']) || 0;
+          return {
+            product_name: name,
+            qty: cleanQty(r['Qty']),
+            unit_price: gram ? price / 1000 : price,
+            unit_cost: gram ? cost / 1000 : cost,
+            buyer_name: buyers[i],
+            sold_at: saleTimes[i],
+          };
+        })
         .filter((it) => it.product_name && it.qty > 0);
 
       if (salesItems.length) {

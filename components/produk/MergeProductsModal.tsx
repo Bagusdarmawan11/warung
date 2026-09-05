@@ -6,6 +6,7 @@ import { Combine } from 'lucide-react';
 import { Modal } from '@/components/Modal';
 import { Button, Field, Input, Select } from '@/components/ui';
 import { mergeProducts } from '@/lib/actions/products';
+import { pricePerGramFromPerKg } from '@/lib/format';
 import type { ProductStockSummary, UnitType } from '@/lib/types';
 
 export function MergeProductsModal({
@@ -36,8 +37,8 @@ export function MergeProductsModal({
       unitType,
       lowStockThreshold: parseFloat(String(fd.get('threshold') || '3')) || 3,
       qty,
-      buyPrice: parseFloat(String(fd.get('buyPrice') || '0')) || 0,
-      sellPrice: parseFloat(String(fd.get('sellPrice') || '0')) || 0,
+      buyPrice: unitType === 'gram' ? pricePerGramFromPerKg(parseFloat(String(fd.get('buyPrice') || '0'))) : (parseFloat(String(fd.get('buyPrice') || '0')) || 0),
+      sellPrice: unitType === 'gram' ? pricePerGramFromPerKg(parseFloat(String(fd.get('sellPrice') || '0'))) : (parseFloat(String(fd.get('sellPrice') || '0')) || 0),
       expiryDate: String(fd.get('expiryDate') || '') || null,
       sourceIds: products.map((p) => p.product_id),
     });
@@ -83,10 +84,10 @@ export function MergeProductsModal({
         <Field label="Tanggal Kadaluwarsa">
           <Input name="expiryDate" type="date" />
         </Field>
-        <Field label={unitType === 'gram' ? 'Harga Modal /gram *' : 'Harga Modal *'}>
+        <Field label={unitType === 'gram' ? 'Harga Modal /kg *' : 'Harga Modal *'}>
           <Input name="buyPrice" type="number" step="any" min={0} required placeholder="0" />
         </Field>
-        <Field label={unitType === 'gram' ? 'Harga Jual /gram *' : 'Harga Jual *'}>
+        <Field label={unitType === 'gram' ? 'Harga Jual /kg *' : 'Harga Jual *'}>
           <Input name="sellPrice" type="number" step="any" min={0} required placeholder="0" />
         </Field>
         <div className="sm:col-span-2">

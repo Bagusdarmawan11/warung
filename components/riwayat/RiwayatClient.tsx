@@ -192,7 +192,7 @@ function SaleDetailModal({ sale, onClose }: { sale: SaleRow | null; onClose: () 
 
   const profit = (sale.unit_price - sale.unit_cost) * sale.qty;
   const durasi = sale.batch?.received_at
-    ? Math.round((new Date(sale.sold_at).getTime() - new Date(sale.batch.received_at + 'T00:00:00').getTime()) / 86400000)
+    ? Math.round((new Date(sale.sold_at).getTime() - new Date(sale.batch.received_at).getTime()) / 86400000)
     : null;
 
   return (

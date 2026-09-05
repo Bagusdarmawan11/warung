@@ -7,7 +7,7 @@ import { Modal, ConfirmDialog } from '@/components/Modal';
 import { Button, Field, Input, Badge } from '@/components/ui';
 import { getBatchesForProduct, updateProduct, updateBatchPrice, adjustStock, deleteProduct } from '@/lib/actions/products';
 import { uploadProductImage } from '@/lib/uploadImage';
-import { rupiah, formatTanggal, formatQty } from '@/lib/format';
+import { rupiah, formatTanggal, formatQty, pricePerKgFromPerGram, pricePerGramFromPerKg } from '@/lib/format';
 import type { ProductBatch, ProductStockSummary } from '@/lib/types';
 
 export function ProductEditModal({
@@ -191,10 +191,18 @@ function BatchRow({
   unitType: 'pcs' | 'gram';
   onSave: (batch: ProductBatch, buy: number, sell: number, expiry: string) => void;
 }) {
-  const [buy, setBuy] = useState(String(batch.buy_price));
-  const [sell, setSell] = useState(String(batch.sell_price));
+  const isGram = unitType === 'gram';
+  const [buy, setBuy] = useState(String(isGram ? pricePerKgFromPerGram(batch.buy_price) : batch.buy_price));
+  const [sell, setSell] = useState(String(isGram ? pricePerKgFromPerGram(batch.sell_price) : batch.sell_price));
   const [expiry, setExpiry] = useState(batch.expiry_date || '');
   const [editing, setEditing] = useState(false);
+
+  function handleSave() {
+    const buyVal = parseFloat(buy) || 0;
+    const sellVal = parseFloat(sell) || 0;
+    onSave(batch, isGram ? pricePerGramFromPerKg(buyVal) : buyVal, isGram ? pricePerGramFromPerKg(sellVal) : sellVal, expiry);
+    setEditing(false);
+  }
 
   return (
     <div className="rounded-xl border border-lilac-100 p-3 text-sm">
@@ -206,16 +214,18 @@ function BatchRow({
       </div>
       {editing ? (
         <div className="grid grid-cols-2 gap-2">
-          <Input type="number" value={buy} onChange={(e) => setBuy(e.target.value)} placeholder="Harga modal" />
-          <Input type="number" value={sell} onChange={(e) => setSell(e.target.value)} placeholder="Harga jual" />
+          <Input type="number" value={buy} onChange={(e) => setBuy(e.target.value)} placeholder={isGram ? 'Harga modal /kg' : 'Harga modal'} />
+          <Input type="number" value={sell} onChange={(e) => setSell(e.target.value)} placeholder={isGram ? 'Harga jual /kg' : 'Harga jual'} />
           <Input type="date" value={expiry} onChange={(e) => setExpiry(e.target.value)} className="col-span-2" />
-          <Button size="sm" className="col-span-2" onClick={() => { onSave(batch, parseFloat(buy) || 0, parseFloat(sell) || 0, expiry); setEditing(false); }}>
+          <Button size="sm" className="col-span-2" onClick={handleSave}>
             Simpan Harga Batch
           </Button>
         </div>
       ) : (
         <button onClick={() => setEditing(true)} className="flex w-full items-center justify-between text-left">
-          <span className="text-ink-soft">Modal {rupiah(batch.buy_price)} &middot; Jual {rupiah(batch.sell_price)}</span>
+          <span className="text-ink-soft">
+            Modal {rupiah(isGram ? pricePerKgFromPerGram(batch.buy_price) : batch.buy_price)}{isGram ? '/kg' : ''} &middot; Jual {rupiah(isGram ? pricePerKgFromPerGram(batch.sell_price) : batch.sell_price)}{isGram ? '/kg' : ''}
+          </span>
           <span className="text-[11px] font-bold text-peach-500">Ubah</span>
         </button>
       )}

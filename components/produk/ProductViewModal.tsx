@@ -7,7 +7,7 @@ import { Badge, ToggleGroup } from '@/components/ui';
 import { getProductMovements, type ProductMovement } from '@/lib/actions/products';
 import { downloadBarcodeAsPng } from '@/components/BarcodeCanvas';
 import { ImageLightbox } from '@/components/ImageLightbox';
-import { rupiah, formatTanggalWaktu, formatQty } from '@/lib/format';
+import { rupiah, formatTanggalWaktu, formatQty, pricePerKgFromPerGram } from '@/lib/format';
 import type { ProductStockSummary } from '@/lib/types';
 
 export function ProductViewModal({
@@ -80,9 +80,9 @@ export function ProductViewModal({
           <>
             <div className="mb-4 grid grid-cols-2 gap-2.5">
               <Stat label="Sisa Stok" value={formatQty(product.stok, product.unit_type)} tone={product.stok <= 0 ? 'bad' : product.stok <= product.low_stock_threshold ? 'warn' : 'good'} />
-              <Stat label="Harga Modal" value={rupiah(modal) + (product.unit_type === 'gram' ? '/gr' : '')} />
-              <Stat label="Harga Jual" value={rupiah(jual) + (product.unit_type === 'gram' ? '/gr' : '')} />
-              <Stat label="Untung / Unit" value={rupiah(untungPerUnit) + (product.unit_type === 'gram' ? '/gr' : '')} tone={untungPerUnit >= 0 ? 'good' : 'bad'} />
+              <Stat label="Harga Modal" value={rupiah(product.unit_type === 'gram' ? pricePerKgFromPerGram(modal) : modal) + (product.unit_type === 'gram' ? '/kg' : '')} />
+              <Stat label="Harga Jual" value={rupiah(product.unit_type === 'gram' ? pricePerKgFromPerGram(jual) : jual) + (product.unit_type === 'gram' ? '/kg' : '')} />
+              <Stat label="Untung / Unit" value={rupiah(product.unit_type === 'gram' ? pricePerKgFromPerGram(untungPerUnit) : untungPerUnit) + (product.unit_type === 'gram' ? '/kg' : '')} tone={untungPerUnit >= 0 ? 'good' : 'bad'} />
             </div>
             <div className="mb-2 grid grid-cols-2 gap-2.5">
               <Stat label="Nilai Modal Stok" value={rupiah(nilaiModalStok)} sub />
@@ -140,9 +140,14 @@ function MovementList({ movements, loading, unitType }: { movements: ProductMove
             </p>
           </div>
           <div className="flex-none text-right">
-            <p className="font-mono text-xs font-bold text-ink">{rupiah(m.unitPrice)}</p>
+            <p className="font-mono text-xs font-bold text-ink">{rupiah(m.qty * (m.unitPrice || 0))}</p>
+            <p className="font-mono text-[10px] text-ink-soft">
+              {rupiah(unitType === 'gram' ? pricePerKgFromPerGram(m.unitPrice || 0) : (m.unitPrice || 0))}{unitType === 'gram' ? '/kg' : ''}
+            </p>
             {m.type === 'keluar' && m.unitCost != null && (
-              <p className="font-mono text-[10px] text-mint-600">+{rupiah((m.unitPrice || 0) - m.unitCost)}</p>
+              <p className="font-mono text-[10px] text-mint-600">
+                +{rupiah(m.qty * ((m.unitPrice || 0) - m.unitCost))}
+              </p>
             )}
           </div>
         </div>

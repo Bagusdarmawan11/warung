@@ -8,7 +8,7 @@ import { BarcodeCanvas, downloadBarcodeAsPng } from '@/components/BarcodeCanvas'
 import { createProduct, addBatch } from '@/lib/actions/products';
 import { getProductSummaries } from '@/lib/actions/products';
 import { uploadProductImage } from '@/lib/uploadImage';
-import { rupiah, todayISO } from '@/lib/format';
+import { rupiah, todayISO, formatQty, pricePerGramFromPerKg, pricePerKgFromPerGram } from '@/lib/format';
 import type { Product, ProductStockSummary, UnitType } from '@/lib/types';
 
 export function BarangMasukClient() {
@@ -58,9 +58,15 @@ function ProdukBaruForm() {
     const fd = new FormData(e.currentTarget);
     const name = String(fd.get('name') || '').trim();
     const qty = parseFloat(String(fd.get('qty') || '0'));
-    const buyPrice = parseFloat(String(fd.get('buyPrice') || '0'));
-    const sellPrice = parseFloat(String(fd.get('sellPrice') || '0'));
+    const buyPriceInput = parseFloat(String(fd.get('buyPrice') || '0'));
+    const sellPriceInput = parseFloat(String(fd.get('sellPrice') || '0'));
     if (!name || !qty || qty <= 0) { toast.error('Lengkapi nama & jumlah barang'); return; }
+
+    // Untuk produk timbangan (gram), admin mengisi harga per KILOGRAM (lebih
+    // wajar buat manusia), tapi database menyimpan harga per-gram (biar
+    // matematika stok konsisten) - dikonversi di sini.
+    const buyPrice = unitType === 'gram' ? pricePerGramFromPerKg(buyPriceInput) : buyPriceInput;
+    const sellPrice = unitType === 'gram' ? pricePerGramFromPerKg(sellPriceInput) : sellPriceInput;
 
     setSaving(true);
     const res = await createProduct({
@@ -173,10 +179,10 @@ function ProdukBaruForm() {
         <Field label="Batas Stok Menipis" hint="Peringatan muncul kalau stok ≤ angka ini">
           <Input name="threshold" type="number" defaultValue={unitType === 'gram' ? 100 : 3} />
         </Field>
-        <Field label={unitType === 'gram' ? 'Harga Modal /gram *' : 'Harga Modal (beli) *'}>
+        <Field label={unitType === 'gram' ? 'Harga Modal /kg *' : 'Harga Modal (beli) *'} hint={unitType === 'gram' ? 'Harga beli per KILOGRAM, bukan per gram' : undefined}>
           <Input name="buyPrice" type="number" step="any" min={0} required placeholder="0" />
         </Field>
-        <Field label={unitType === 'gram' ? 'Harga Jual /gram *' : 'Harga Jual *'}>
+        <Field label={unitType === 'gram' ? 'Harga Jual /kg *' : 'Harga Jual *'} hint={unitType === 'gram' ? 'Harga jual per KILOGRAM, bukan per gram' : undefined}>
           <Input name="sellPrice" type="number" step="any" min={0} required placeholder="0" />
         </Field>
         <Field label="Tanggal Kadaluwarsa" full>
@@ -219,12 +225,18 @@ function RestockForm() {
     const qty = parseFloat(String(fd.get('qty') || '0'));
     if (!qty || qty <= 0) { toast.error('Isi jumlah tambahan stok'); return; }
 
+    const isGram = picked.unit_type === 'gram';
+    const buyPriceInput = fd.get('buyPrice') ? parseFloat(String(fd.get('buyPrice'))) : null;
+    const sellPriceInput = fd.get('sellPrice') ? parseFloat(String(fd.get('sellPrice'))) : null;
+    const buyPrice = buyPriceInput != null ? (isGram ? pricePerGramFromPerKg(buyPriceInput) : buyPriceInput) : (picked.harga_modal_aktif || 0);
+    const sellPrice = sellPriceInput != null ? (isGram ? pricePerGramFromPerKg(sellPriceInput) : sellPriceInput) : (picked.harga_jual_aktif || 0);
+
     setSaving(true);
     const res = await addBatch({
       productId: picked.product_id,
       qty,
-      buyPrice: parseFloat(String(fd.get('buyPrice') || '0')) || picked.harga_modal_aktif || 0,
-      sellPrice: parseFloat(String(fd.get('sellPrice') || '0')) || picked.harga_jual_aktif || 0,
+      buyPrice,
+      sellPrice,
       expiryDate: String(fd.get('expiryDate') || '') || null,
       receivedAt: todayISO(),
     });
@@ -266,7 +278,8 @@ function RestockForm() {
           <div className="mb-4 rounded-xl bg-lilac-50 p-3">
             <p className="font-bold text-ink">{picked.name}</p>
             <p className="font-mono text-xs text-ink-soft">
-              {picked.code} &middot; stok sekarang: {picked.stok} &middot; {rupiah(picked.harga_jual_aktif)}
+              {picked.code} &middot; stok sekarang: {formatQty(picked.stok, picked.unit_type)} &middot;{' '}
+              {picked.unit_type === 'gram' ? `${rupiah(pricePerKgFromPerGram(picked.harga_jual_aktif || 0))}/kg` : rupiah(picked.harga_jual_aktif)}
             </p>
           </div>
           <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
@@ -276,11 +289,11 @@ function RestockForm() {
             <Field label="Tanggal Kadaluwarsa Baru">
               <Input name="expiryDate" type="date" />
             </Field>
-            <Field label="Harga Modal Baru (opsional)">
-              <Input name="buyPrice" type="number" step="any" min={0} placeholder={String(picked.harga_modal_aktif || 0)} />
+            <Field label={picked.unit_type === 'gram' ? 'Harga Modal Baru /kg (opsional)' : 'Harga Modal Baru (opsional)'}>
+              <Input name="buyPrice" type="number" step="any" min={0} placeholder={String(picked.unit_type === 'gram' ? pricePerKgFromPerGram(picked.harga_modal_aktif || 0) : (picked.harga_modal_aktif || 0))} />
             </Field>
-            <Field label="Harga Jual Baru (opsional)">
-              <Input name="sellPrice" type="number" step="any" min={0} placeholder={String(picked.harga_jual_aktif || 0)} />
+            <Field label={picked.unit_type === 'gram' ? 'Harga Jual Baru /kg (opsional)' : 'Harga Jual Baru (opsional)'}>
+              <Input name="sellPrice" type="number" step="any" min={0} placeholder={String(picked.unit_type === 'gram' ? pricePerKgFromPerGram(picked.harga_jual_aktif || 0) : (picked.harga_jual_aktif || 0))} />
             </Field>
             <div className="sm:col-span-2">
               <Button type="submit" full disabled={saving}>

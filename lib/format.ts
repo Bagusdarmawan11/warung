@@ -58,3 +58,18 @@ export function daysUntil(iso: string | null | undefined): number | null {
   if (isNaN(target.getTime())) return null;
   return Math.round((target.getTime() - today.getTime()) / 86400000);
 }
+
+/**
+ * Produk satuan "gram" disimpan & dihitung di database per-gram (supaya
+ * matematika stok konsisten), tapi manusia biasanya mikir harga barang
+ * timbangan per KILOGRAM (misal harga telur/kemiri/lada per kg). Dua fungsi
+ * ini menjembatani itu: dipakai di form-form input harga untuk produk gram,
+ * supaya admin cukup ketik harga per kg seperti biasa, sistem yang
+ * mengonversi ke per-gram di baliknya.
+ */
+export function pricePerKgFromPerGram(pricePerGram: number): number {
+  return Math.round((pricePerGram || 0) * 1000);
+}
+export function pricePerGramFromPerKg(pricePerKg: number): number {
+  return (pricePerKg || 0) / 1000;
+}

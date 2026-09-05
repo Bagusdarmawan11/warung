@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   TrendingUp, Trophy, PackageSearch, Sparkles, Loader2, AlertTriangle,
-  LineChart as LineChartIcon, BarChart3, Boxes, Wallet, ArrowDownCircle, ArrowUpCircle, Crown,
+  LineChart as LineChartIcon, BarChart3, Wallet, ArrowDownCircle, ArrowUpCircle, Crown,
 } from 'lucide-react';
 import { Card, Badge, EmptyState, ToggleGroup, Input } from '@/components/ui';
 import { TrendChartToggle } from '@/components/beranda/TrendChartToggle';
@@ -82,12 +82,16 @@ export function BerandaClient({
   const totalModal = products.reduce((s, p) => s + p.stok * (p.harga_modal_aktif || 0), 0);
   const stokMenipis = products.filter((p) => p.stok > 0 && p.stok <= p.low_stock_threshold).sort((a, b) => a.stok - b.stok);
   const stokHabis = products.filter((p) => p.stok <= 0);
+
+  const [expiryDays, setExpiryDays] = useState(30);
   const akanExpired = products
-    .filter((p) => { const d = daysUntil(p.kadaluwarsa_terdekat); return d !== null && d <= 30; })
+    .filter((p) => { const d = daysUntil(p.kadaluwarsa_terdekat); return d !== null && d <= expiryDays; })
     .sort((a, b) => (daysUntil(a.kadaluwarsa_terdekat) ?? 0) - (daysUntil(b.kadaluwarsa_terdekat) ?? 0));
 
+  const [bestSortBy, setBestSortBy] = useState<'omzet' | 'untung' | 'frekuensi'>('omzet');
+
   const trend = useMemo(() => aggregateByPeriod(sales, period).map((t) => ({ label: t.label, omzet: t.omzet })), [sales, period]);
-  const best = useMemo(() => bestSellers(sales, 8), [sales]);
+  const best = useMemo(() => bestSellers(sales, 8, bestSortBy), [sales, bestSortBy]);
   const topCustomers = useMemo(() => topBuyers(sales, 8), [sales]);
   const restock = useMemo(() => restockPrediction(sales, products), [sales, products]);
   const totals120 = useMemo(() => summarize(sales), [sales]);
@@ -207,7 +211,7 @@ export function BerandaClient({
           <h2 className="font-display text-base font-bold text-ink">Analisis AI</h2>
         </div>
         {aiState.text ? (
-          <p className="whitespace-pre-line text-sm leading-relaxed text-ink">{aiState.text}</p>
+          <AiText text={aiState.text} />
         ) : aiState.reason === 'not_configured' ? (
           <p className="text-sm text-ink-soft">
             Fitur ini butuh <code className="rounded bg-white/70 px-1 py-0.5 font-mono text-xs">GEMINI_API_KEY</code> di environment variable. Lihat README bagian &quot;AI Insight&quot;.
@@ -222,9 +226,16 @@ export function BerandaClient({
       </Card>
 
       {/* Best sellers */}
-      <h2 className="mb-3 flex items-center gap-1.5 font-display text-base font-bold text-ink"><Trophy size={17} className="text-butter-500" /> Produk Terlaris</h2>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="flex items-center gap-1.5 font-display text-base font-bold text-ink"><Trophy size={17} className="text-butter-500" /> Produk Terlaris</h2>
+        <ToggleGroup
+          value={bestSortBy}
+          onChange={(v) => setBestSortBy(v as any)}
+          options={[{ value: 'omzet', label: 'Omzet' }, { value: 'untung', label: 'Untung' }, { value: 'frekuensi', label: 'Frekuensi' }]}
+        />
+      </div>
       <Card className="mb-6">
-        {best.length === 0 ? <EmptyState title="Belum ada penjualan" /> : <BestSellerChart data={best} />}
+        {best.length === 0 ? <EmptyState title="Belum ada penjualan" /> : <BestSellerChart data={best} sortBy={bestSortBy} />}
       </Card>
 
       {/* Top pelanggan */}
@@ -285,46 +296,112 @@ export function BerandaClient({
           right: p.stok <= 0 ? <Badge tone="bad">Habis</Badge> : <Badge tone="warn">Sisa {p.stok}</Badge>,
         }))}
         emptyText="Aman, tidak ada stok menipis maupun habis."
+        viewAllHref="/produk?status=bermasalah"
       />
 
       {/* Segera kadaluwarsa */}
+      <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-display text-base font-bold text-ink">Segera Kadaluwarsa</h2>
+        <ToggleGroup
+          value={String(expiryDays)}
+          onChange={(v) => setExpiryDays(Number(v))}
+          options={[{ value: '30', label: '1 Bln' }, { value: '90', label: '3 Bln' }, { value: '180', label: '6 Bln' }, { value: '365', label: '1 Thn' }]}
+        />
+      </div>
       <SectionList
-        title="Segera Kadaluwarsa (30 hari)"
+        hideTitle
+        title={`Segera Kadaluwarsa (${expiryDays} hari)`}
         count={akanExpired.length}
         items={akanExpired.slice(0, 8).map((p) => {
           const d = daysUntil(p.kadaluwarsa_terdekat) ?? 0;
           return { key: p.product_id, name: p.name, code: p.code, right: <Badge tone={d < 0 ? 'bad' : d <= 7 ? 'warn' : 'good'}>{d < 0 ? `Lewat ${Math.abs(d)} hr` : `${d} hari lagi`}</Badge> };
         })}
-        emptyText="Tidak ada produk yang akan kadaluwarsa dalam 30 hari."
+        emptyText={`Tidak ada produk yang akan kadaluwarsa dalam ${expiryDays} hari.`}
+        viewAllHref={`/produk?status=expired&days=${expiryDays}`}
       />
-
-      <Link href="/produk" className="inline-flex items-center gap-1.5 text-xs font-bold text-peach-500 hover:underline"><Boxes size={13} /> Lihat semua produk →</Link>
     </div>
   );
 }
 
-function SectionList({ title, count, items, emptyText }: { title: string; count: number; items: { key: string; name: string; code: string; right: React.ReactNode }[]; emptyText: string }) {
+function AiText({ text }: { text: string }) {
+  const lines = text.split('\n').filter((l) => l.trim() !== '');
+  return (
+    <div className="space-y-2 text-sm leading-relaxed text-ink">
+      {lines.map((line, i) => {
+        const headingMatch = /^\*\*(.+)\*\*$/.exec(line.trim());
+        if (headingMatch) {
+          return <p key={i} className="mt-3 font-display text-[15px] font-bold text-ink first:mt-0">{headingMatch[1]}</p>;
+        }
+        const cleaned = line.replace(/^[-•]\s*/, '');
+        const isBullet = /^[-•]\s/.test(line);
+        const parts = cleaned.split(/\*\*(.+?)\*\*/g);
+        const rendered = parts.map((part, j) => (j % 2 === 1 ? <strong key={j}>{part}</strong> : part));
+        return isBullet ? (
+          <div key={i} className="flex gap-2 pl-1">
+            <span className="text-peach-400">•</span>
+            <p className="flex-1">{rendered}</p>
+          </div>
+        ) : (
+          <p key={i}>{rendered}</p>
+        );
+      })}
+    </div>
+  );
+}
+
+function SectionList({
+  title,
+  count,
+  items,
+  emptyText,
+  viewAllHref,
+  hideTitle,
+}: {
+  title: string;
+  count: number;
+  items: { key: string; name: string; code: string; right: React.ReactNode }[];
+  emptyText: string;
+  viewAllHref?: string;
+  hideTitle?: boolean;
+}) {
   return (
     <div className="mb-6">
-      <div className="mb-2.5 flex items-center justify-between">
-        <h2 className="font-display text-base font-bold text-ink">{title}</h2>
-        <span className="font-mono text-xs text-ink-soft">{count} produk</span>
-      </div>
+      {!hideTitle && (
+        <div className="mb-2.5 flex items-center justify-between">
+          <h2 className="font-display text-base font-bold text-ink">{title}</h2>
+          <span className="font-mono text-xs text-ink-soft">{count} produk</span>
+        </div>
+      )}
       {items.length === 0 ? (
         <EmptyState icon={<AlertTriangle size={26} />} title={emptyText} />
       ) : (
-        <Card tight className="divide-y divide-lilac-100 !p-0 overflow-hidden">
-          {items.map((it) => (
-            <div key={it.key} className="flex items-center justify-between gap-3 px-4 py-3">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-ink">{it.name}</p>
-                <p className="font-mono text-[11px] text-ink-soft">{it.code}</p>
+        <>
+          <Card tight className="divide-y divide-lilac-100 !p-0 overflow-hidden">
+            {items.map((it) => (
+              <div key={it.key} className="flex items-center justify-between gap-3 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-ink">{it.name}</p>
+                  <p className="font-mono text-[11px] text-ink-soft">{it.code}</p>
+                </div>
+                {it.right}
               </div>
-              {it.right}
-            </div>
-          ))}
-        </Card>
+            ))}
+          </Card>
+          {viewAllHref && count > 0 && (
+            <Link href={viewAllHref} className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-peach-500 hover:underline">
+              Lihat semua ({count}) <ArrowRightIcon />
+            </Link>
+          )}
+        </>
       )}
     </div>
+  );
+}
+
+function ArrowRightIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 12h14M13 6l6 6-6 6" />
+    </svg>
   );
 }

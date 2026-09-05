@@ -50,7 +50,9 @@ export interface BestSellerRow {
   jumlah_transaksi: number;
 }
 
-export function bestSellers(sales: SaleRow[], limit = 10): BestSellerRow[] {
+export type BestSellerSortBy = 'omzet' | 'untung' | 'frekuensi';
+
+export function bestSellers(sales: SaleRow[], limit = 10, sortBy: BestSellerSortBy = 'omzet'): BestSellerRow[] {
   const map = new Map<string, BestSellerRow>();
   for (const s of sales) {
     const cur = map.get(s.product_name_snapshot) || {
@@ -66,7 +68,8 @@ export function bestSellers(sales: SaleRow[], limit = 10): BestSellerRow[] {
     cur.jumlah_transaksi += 1;
     map.set(s.product_name_snapshot, cur);
   }
-  return [...map.values()].sort((a, b) => b.omzet - a.omzet).slice(0, limit);
+  const key = sortBy === 'untung' ? 'untung' : sortBy === 'frekuensi' ? 'jumlah_transaksi' : 'omzet';
+  return [...map.values()].sort((a, b) => (b as any)[key] - (a as any)[key]).slice(0, limit);
 }
 
 export interface RestockSuggestion {

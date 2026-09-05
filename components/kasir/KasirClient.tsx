@@ -9,7 +9,7 @@ import { BarcodeScannerModal } from '@/components/BarcodeScannerModal';
 import { ImageLightbox } from '@/components/ImageLightbox';
 import { getProductByCode, getProductSummaries } from '@/lib/actions/products';
 import { checkoutCart } from '@/lib/actions/sales';
-import { rupiah, formatQty } from '@/lib/format';
+import { rupiah, formatQty, pricePerKgFromPerGram, pricePerGramFromPerKg } from '@/lib/format';
 import type { ProductStockSummary } from '@/lib/types';
 
 interface CartLine {
@@ -49,6 +49,7 @@ export function KasirClient() {
   const [scannerOpen, setScannerOpen] = useState(false);
   const [gramPrompt, setGramPrompt] = useState<ProductStockSummary | null>(null);
   const [gramValue, setGramValue] = useState('');
+  const [gramPriceKg, setGramPriceKg] = useState('');
   const [insufficientOpen, setInsufficientOpen] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
@@ -97,6 +98,7 @@ export function KasirClient() {
     if (p.unit_type === 'gram') {
       setGramPrompt(p);
       setGramValue('');
+      setGramPriceKg(String(pricePerKgFromPerGram(p.harga_jual_aktif || 0)));
     } else {
       addPcsToCart(p);
     }
@@ -133,6 +135,8 @@ export function KasirClient() {
     if (!gramPrompt) return;
     const gram = parseFloat(gramValue.replace(',', '.'));
     if (!gram || gram <= 0) { toast.error('Isi berat dalam gram terlebih dahulu'); return; }
+    const priceKg = parseFloat(gramPriceKg.replace(',', '.')) || 0;
+    const unitPricePerGram = pricePerGramFromPerKg(priceKg);
     setCart((cur) => {
       const existing = cur.find((c) => c.product_id === gramPrompt.product_id);
       if (existing) {
@@ -146,7 +150,7 @@ export function KasirClient() {
           name: gramPrompt.name,
           unit_type: 'gram',
           qty: gram,
-          unit_price: gramPrompt.harga_jual_aktif || 0,
+          unit_price: unitPricePerGram,
           stok_tersedia: gramPrompt.stok,
           image_url: gramPrompt.image_url,
         },
@@ -263,11 +267,14 @@ export function KasirClient() {
                     <span>&middot;</span>
                     <input
                       type="number"
-                      value={item.unit_price}
-                      onChange={(e) => setUnitPrice(item.product_id, parseFloat(e.target.value) || 0)}
+                      value={item.unit_type === 'gram' ? pricePerKgFromPerGram(item.unit_price) : item.unit_price}
+                      onChange={(e) => {
+                        const v = parseFloat(e.target.value) || 0;
+                        setUnitPrice(item.product_id, item.unit_type === 'gram' ? pricePerGramFromPerKg(v) : v);
+                      }}
                       className="w-20 rounded border border-lilac-200 bg-lilac-50/60 px-1 py-0.5 font-mono text-[11px]"
                     />
-                    <span>/{item.unit_type === 'gram' ? 'gr' : 'pcs'}</span>
+                    <span>/{item.unit_type === 'gram' ? 'kg' : 'pcs'}</span>
                     {item.qty > item.stok_tersedia && <span className="font-bold text-rose-500">stok {formatQty(item.stok_tersedia, item.unit_type)}</span>}
                   </div>
                 </div>
@@ -331,19 +338,32 @@ export function KasirClient() {
                 />
               </div>
             )}
-            <Field label="Berat terjual (gram)">
-              <Input
-                type="number"
-                autoFocus
-                value={gramValue}
-                onChange={(e) => setGramValue(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') confirmGramAdd(); }}
-                placeholder="Cth: 250"
-              />
-            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Berat terjual (gram)">
+                <Input
+                  type="number"
+                  autoFocus
+                  value={gramValue}
+                  onChange={(e) => setGramValue(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') confirmGramAdd(); }}
+                  placeholder="Cth: 250"
+                />
+              </Field>
+              <Field label="Harga jual /kg" hint="Bisa disesuaikan kalau harga hari ini beda">
+                <Input
+                  type="number"
+                  value={gramPriceKg}
+                  onChange={(e) => setGramPriceKg(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') confirmGramAdd(); }}
+                  placeholder="Cth: 26000"
+                />
+              </Field>
+            </div>
             <p className="mb-4 text-sm text-ink-soft">
-              Harga: {rupiah(gramPrompt.harga_jual_aktif)}/gr &middot; Perkiraan total:{' '}
-              <span className="font-bold text-ink">{rupiah((parseFloat(gramValue) || 0) * (gramPrompt.harga_jual_aktif || 0))}</span>
+              Perkiraan total:{' '}
+              <span className="font-bold text-ink">
+                {rupiah((parseFloat(gramValue) || 0) * pricePerGramFromPerKg(parseFloat(gramPriceKg) || 0))}
+              </span>
             </p>
             <Button full onClick={confirmGramAdd}>Tambah ke Keranjang</Button>
           </>
