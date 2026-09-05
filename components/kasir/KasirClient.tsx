@@ -2,14 +2,14 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { ScanLine, Plus, Minus, Trash2, Camera, CheckCircle2, ShoppingCart, ImageIcon } from 'lucide-react';
+import { ScanLine, Plus, Minus, Trash2, Camera, CheckCircle2, ShoppingCart, ImageIcon, CalendarClock } from 'lucide-react';
 import { Button, Card, Input, Field, EmptyState } from '@/components/ui';
 import { Modal, ConfirmDialog } from '@/components/Modal';
 import { BarcodeScannerModal } from '@/components/BarcodeScannerModal';
 import { ImageLightbox } from '@/components/ImageLightbox';
 import { getProductByCode, getProductSummaries } from '@/lib/actions/products';
 import { checkoutCart } from '@/lib/actions/sales';
-import { rupiah, formatQty, pricePerKgFromPerGram, pricePerGramFromPerKg } from '@/lib/format';
+import { rupiah, formatQty, todayISO, combineDateWithNowTime, pricePerKgFromPerGram, pricePerGramFromPerKg } from '@/lib/format';
 import type { ProductStockSummary } from '@/lib/types';
 
 interface CartLine {
@@ -46,6 +46,7 @@ export function KasirClient() {
   const [suggestions, setSuggestions] = useState<ProductStockSummary[]>([]);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [buyerName, setBuyerName] = useState('');
+  const [transactionDate, setTransactionDate] = useState(() => todayISO());
   const [scannerOpen, setScannerOpen] = useState(false);
   const [gramPrompt, setGramPrompt] = useState<ProductStockSummary | null>(null);
   const [gramValue, setGramValue] = useState('');
@@ -182,7 +183,8 @@ export function KasirClient() {
       const res = await checkoutCart(
         cart.map((c) => ({ productId: c.product_id, qty: c.qty, unitPriceOverride: c.unit_price })),
         buyerName,
-        allowOversell
+        allowOversell,
+        combineDateWithNowTime(transactionDate)
       );
       if (!res.ok) {
         if (res.kind === 'INSUFFICIENT_STOCK') {
@@ -195,6 +197,7 @@ export function KasirClient() {
       toast.success('Transaksi berhasil disimpan');
       setCart([]);
       setBuyerName('');
+      setTransactionDate(todayISO());
       setInsufficientOpen(false);
     } catch (e: any) {
       toast.error('Gagal checkout: ' + e.message);
@@ -252,9 +255,19 @@ export function KasirClient() {
         <EmptyState icon={<ShoppingCart size={30} />} title="Keranjang masih kosong" hint="Scan barcode produk untuk memulai transaksi." />
       ) : (
         <>
-          <Field label="Nama pembeli (opsional)">
-            <Input value={buyerName} onChange={(e) => setBuyerName(e.target.value)} placeholder="Cth: Bu Lubis" />
-          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Nama pembeli (opsional)">
+              <Input value={buyerName} onChange={(e) => setBuyerName(e.target.value)} placeholder="Cth: Bu Lubis" />
+            </Field>
+            <Field label="Tanggal transaksi">
+              <Input type="date" max={todayISO()} value={transactionDate} onChange={(e) => setTransactionDate(e.target.value)} />
+            </Field>
+          </div>
+          {transactionDate !== todayISO() && (
+            <p className="-mt-3 mb-4 flex items-center gap-1.5 text-[11px] font-bold text-butter-500">
+              <CalendarClock size={13} /> Transaksi akan dicatat untuk tanggal {transactionDate}, bukan hari ini
+            </p>
+          )}
 
           <div className="mb-4 space-y-2">
             {cart.map((item) => (

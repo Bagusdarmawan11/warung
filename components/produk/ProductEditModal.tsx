@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Save, PlusCircle, MinusCircle, Layers, ImagePlus, Trash2 } from 'lucide-react';
 import { Modal, ConfirmDialog } from '@/components/Modal';
-import { Button, Field, Input, Badge } from '@/components/ui';
+import { Button, Field, Input, Badge, Select } from '@/components/ui';
 import { getBatchesForProduct, updateProduct, updateBatchPrice, adjustStock, deleteProduct } from '@/lib/actions/products';
 import { uploadProductImage } from '@/lib/uploadImage';
 import { rupiah, formatTanggal, formatQty, pricePerKgFromPerGram, pricePerGramFromPerKg } from '@/lib/format';
@@ -29,11 +29,15 @@ export function ProductEditModal({
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [unitType, setUnitType] = useState<'pcs' | 'gram'>('pcs');
+  const [confirmUnitChange, setConfirmUnitChange] = useState(false);
+  const pendingFormData = useRef<FormData | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!product) return;
     setImagePreview(product.image_url);
+    setUnitType(product.unit_type);
     setLoadingBatches(true);
     getBatchesForProduct(product.product_id).then(setBatches).finally(() => setLoadingBatches(false));
   }, [product]);
@@ -43,12 +47,22 @@ export function ProductEditModal({
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
+    if (unitType !== product!.unit_type) {
+      pendingFormData.current = fd;
+      setConfirmUnitChange(true);
+      return;
+    }
+    await doSave(fd);
+  }
+
+  async function doSave(fd: FormData) {
     setSaving(true);
     const res = await updateProduct({
       productId: product!.product_id,
       name: String(fd.get('name') || ''),
       category: String(fd.get('category') || ''),
       lowStockThreshold: parseFloat(String(fd.get('threshold') || '0')) || 0,
+      unitType,
     });
     setSaving(false);
     if (!res.ok) { toast.error(res.error); return; }
@@ -132,6 +146,12 @@ export function ProductEditModal({
         <Field label="Batas Stok Menipis">
           <Input name="threshold" type="number" step="any" defaultValue={product.low_stock_threshold} />
         </Field>
+        <Field label="Jenis Satuan" full hint={unitType !== product.unit_type ? '⚠️ Mengubah ini TIDAK mengonversi angka stok yang sudah ada — pastikan angka stok saat ini memang sudah sesuai arti satuan barunya.' : 'Ubah kalau produk ini salah dibuat sebagai pcs/gram sebelumnya.'}>
+          <Select value={unitType} onChange={(e) => setUnitType(e.target.value as 'pcs' | 'gram')}>
+            <option value="pcs">Satuan / Pack (pcs)</option>
+            <option value="gram">Timbangan (gram)</option>
+          </Select>
+        </Field>
         <div className="sm:col-span-2">
           <Button type="submit" full disabled={saving}>
             <Save size={16} /> {saving ? 'Menyimpan...' : 'Simpan Perubahan'}
@@ -176,6 +196,16 @@ export function ProductEditModal({
         onConfirm={handleDelete}
         title="Hapus Produk"
         message={`Hapus "${product.name}" dari daftar barang? Kalau produk ini punya riwayat transaksi, produk akan diarsipkan (bukan dihapus total) supaya laporan lama tetap akurat.`}
+        danger
+      />
+
+      <ConfirmDialog
+        open={confirmUnitChange}
+        onClose={() => { setConfirmUnitChange(false); setUnitType(product.unit_type); }}
+        onConfirm={() => { setConfirmUnitChange(false); if (pendingFormData.current) doSave(pendingFormData.current); }}
+        title="Ubah Jenis Satuan"
+        message={`Ubah jenis satuan produk ini jadi "${unitType === 'gram' ? 'Timbangan (gram)' : 'Satuan (pcs)'}"? Angka stok yang sudah ada TIDAK ikut dikonversi — hanya cara sistem membaca angkanya yang berubah. Pastikan angka stok saat ini memang sudah sesuai (misal kalau diubah ke gram, pastikan angka stoknya memang gramasi, bukan jumlah pcs).`}
+        confirmLabel="Ya, Ubah"
         danger
       />
     </Modal>

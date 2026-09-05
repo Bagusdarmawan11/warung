@@ -3,13 +3,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
-import { Search, Boxes, Plus, UploadCloud, X, Trash2, Download, Combine, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Boxes, Plus, UploadCloud, X, Trash2, Download, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Card, Input, Chip, Badge, Button, EmptyState } from '@/components/ui';
 import { ConfirmDialog } from '@/components/Modal';
 import { downloadBarcodesAsPng } from '@/components/BarcodeCanvas';
 import { ProductViewModal } from '@/components/produk/ProductViewModal';
 import { ProductEditModal } from '@/components/produk/ProductEditModal';
-import { MergeProductsModal } from '@/components/produk/MergeProductsModal';
 import { getProductSummaries, deleteProduct } from '@/lib/actions/products';
 import { useLongPress } from '@/lib/hooks/useLongPress';
 import { rupiah, formatTanggal, formatQty, daysUntil } from '@/lib/format';
@@ -35,7 +34,6 @@ export function ProdukClient({ initialProducts }: { initialProducts: ProductStoc
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [viewing, setViewing] = useState<ProductStockSummary | null>(null);
   const [editing, setEditing] = useState<ProductStockSummary | null>(null);
-  const [merging, setMerging] = useState<ProductStockSummary[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<ProductStockSummary | null>(null);
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
 
@@ -86,11 +84,7 @@ export function ProdukClient({ initialProducts }: { initialProducts: ProductStoc
     downloadBarcodesAsPng(items);
   }
 
-  function openMergeModal() {
-    const items = products.filter((p) => selected.has(p.product_id));
-    if (items.length < 2) { toast.error('Pilih minimal 2 produk untuk digabung'); return; }
-    setMerging(items);
-  }
+
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -142,7 +136,6 @@ export function ProdukClient({ initialProducts }: { initialProducts: ProductStoc
             <X size={15} />
           </button>
           <span className="flex-1 text-sm font-bold">{selected.size} dipilih</span>
-          <Button variant="secondary" size="sm" onClick={openMergeModal}><Combine size={13} /> Gabung</Button>
           <Button variant="secondary" size="sm" onClick={downloadSelectedBarcodes}><Download size={13} /> Barcode</Button>
           <Button variant="danger" size="sm" onClick={() => setBulkDeleteConfirm(true)}><Trash2 size={13} /> Hapus</Button>
         </div>
@@ -177,7 +170,7 @@ export function ProdukClient({ initialProducts }: { initialProducts: ProductStoc
         <EmptyState icon={<Boxes size={28} />} title="Tidak ada produk yang cocok" />
       ) : (
         <>
-          <p className="mb-2 text-[11px] font-semibold text-ink-soft">Tekan nama produk untuk lihat detail. Tekan &amp; tahan untuk pilih banyak (bisa gabung produk juga).</p>
+          <p className="mb-2 text-[11px] font-semibold text-ink-soft">Tekan nama produk untuk lihat detail. Tekan &amp; tahan untuk pilih banyak.</p>
           <div className="space-y-2">
             {paged.map((p, idx) => (
               <ProductRow
@@ -226,12 +219,6 @@ export function ProdukClient({ initialProducts }: { initialProducts: ProductStoc
         onClose={() => setEditing(null)}
         onSaved={() => { refresh(); }}
         onDeleted={() => { setEditing(null); refresh(); }}
-      />
-
-      <MergeProductsModal
-        products={merging}
-        onClose={() => setMerging([])}
-        onMerged={() => { setMerging([]); cancelSelection(); refresh(); }}
       />
 
       <ConfirmDialog

@@ -1,13 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Edit2, Printer, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
+import { Edit2, Printer, ArrowDownCircle, ArrowUpCircle, CalendarClock } from 'lucide-react';
 import { Modal } from '@/components/Modal';
 import { Badge, ToggleGroup } from '@/components/ui';
 import { getProductMovements, type ProductMovement } from '@/lib/actions/products';
 import { downloadBarcodeAsPng } from '@/components/BarcodeCanvas';
 import { ImageLightbox } from '@/components/ImageLightbox';
-import { rupiah, formatTanggalWaktu, formatQty, pricePerKgFromPerGram } from '@/lib/format';
+import { rupiah, formatTanggalWaktu, formatTanggal, formatQty, pricePerKgFromPerGram } from '@/lib/format';
 import type { ProductStockSummary } from '@/lib/types';
 
 export function ProductViewModal({
@@ -88,9 +88,14 @@ export function ProductViewModal({
               <Stat label="Nilai Modal Stok" value={rupiah(nilaiModalStok)} sub />
               <Stat label="Potensi Untung Stok" value={rupiah(potensiUntung)} sub tone={potensiUntung >= 0 ? 'good' : 'bad'} />
             </div>
-            {product.kadaluwarsa_terdekat && (
-              <p className="mb-4 text-xs text-ink-soft">Kadaluwarsa terdekat: <span className="font-semibold text-ink">{formatTanggalWaktu(product.kadaluwarsa_terdekat)}</span></p>
-            )}
+            <div className="mb-4 space-y-1.5 rounded-xl bg-lilac-50/60 p-3">
+              <InfoRow icon={<ArrowDownCircle size={13} />} label="Terakhir masuk/restock" value={product.tanggal_masuk_terakhir ? formatTanggalWaktu(product.tanggal_masuk_terakhir) : '-'} />
+              <InfoRow
+                icon={<CalendarClock size={13} />}
+                label="Kadaluwarsa terdekat"
+                value={product.kadaluwarsa_terdekat ? formatTanggal(product.kadaluwarsa_terdekat) : 'Tidak ada'}
+              />
+            </div>
 
             <button
               onClick={() => onEditClick(product)}
@@ -106,6 +111,16 @@ export function ProductViewModal({
 
       <ImageLightbox src={lightbox} alt={product.name} onClose={() => setLightbox(null)} />
     </>
+  );
+}
+
+function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      <span className="text-ink-soft">{icon}</span>
+      <span className="flex-1 text-ink-soft">{label}</span>
+      <span className="font-semibold text-ink">{value}</span>
+    </div>
   );
 }
 

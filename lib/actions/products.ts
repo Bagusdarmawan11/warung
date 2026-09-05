@@ -199,17 +199,20 @@ export interface UpdateProductInput {
   name: string;
   category?: string;
   lowStockThreshold: number;
+  unitType?: UnitType;
 }
 
 export async function updateProduct(input: UpdateProductInput): Promise<ActionResult> {
   const supabase = await createClient();
+  const payload: Record<string, any> = {
+    name: input.name.trim(),
+    category: input.category?.trim() || null,
+    low_stock_threshold: input.lowStockThreshold,
+  };
+  if (input.unitType) payload.unit_type = input.unitType;
   const { error } = await supabase
     .from('products')
-    .update({
-      name: input.name.trim(),
-      category: input.category?.trim() || null,
-      low_stock_threshold: input.lowStockThreshold,
-    })
+    .update(payload)
     .eq('id', input.productId);
   if (error) return { ok: false, error: error.message };
   revalidateAll();

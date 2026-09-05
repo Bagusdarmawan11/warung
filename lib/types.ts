@@ -38,6 +38,7 @@ export interface StockInHistoryRow {
   sell_price: number | null;
   received_at: string;
   created_at: string;
+  product?: { unit_type: UnitType } | null;
 }
 
 export interface SaleRow {
@@ -53,6 +54,7 @@ export interface SaleRow {
   buyer_name: string | null;
   sold_at: string;
   batch?: { received_at: string } | null;
+  product?: { unit_type: UnitType } | null;
 }
 
 // Ringkasan stok gabungan (dari view product_stock_summary)
@@ -69,6 +71,7 @@ export interface ProductStockSummary {
   harga_modal_aktif: number | null;
   kadaluwarsa_terdekat: string | null;
   image_url: string | null;
+  tanggal_masuk_terakhir: string | null;
 }
 
 export interface CartItem {

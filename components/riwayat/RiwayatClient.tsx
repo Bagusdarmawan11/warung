@@ -7,7 +7,7 @@ import { Modal } from '@/components/Modal';
 import { getSalesHistory, getStockInHistory, getProductStockById } from '@/lib/actions/sales';
 import { downloadCsv } from '@/lib/csv';
 import { exportSalesToPdf } from '@/lib/pdf';
-import { rupiah, formatTanggal, formatTanggalWaktu } from '@/lib/format';
+import { rupiah, formatTanggal, formatTanggalWaktu, formatQty, pricePerKgFromPerGram } from '@/lib/format';
 import type { SaleRow, StockInHistoryRow } from '@/lib/types';
 
 const PAGE_SIZE = 20;
@@ -135,7 +135,7 @@ export function RiwayatClient({
                     </div>
                     <div className="flex-none text-right">
                       <p className="font-mono text-sm font-bold text-ink">{rupiah(r.total)}</p>
-                      <p className="font-mono text-[11px] text-ink-soft">{r.qty} x {rupiah(r.unit_price)}</p>
+                      <p className="font-mono text-[11px] text-ink-soft">{formatQty(r.qty, r.product?.unit_type || 'pcs')} x {rupiah(r.unit_price)}</p>
                     </div>
                   </Card>
                 </button>
@@ -155,7 +155,7 @@ export function RiwayatClient({
                 <p className="text-[11px] text-ink-soft">{formatTanggal(r.received_at)}</p>
               </div>
               <div className="flex-none text-right">
-                <p className="font-mono text-sm font-bold text-mint-600">+{r.qty}</p>
+                <p className="font-mono text-sm font-bold text-mint-600">+{formatQty(r.qty, r.product?.unit_type || 'pcs')}</p>
                 <p className="font-mono text-[11px] text-ink-soft">modal {rupiah(r.buy_price)}</p>
               </div>
             </Card>
@@ -190,6 +190,7 @@ function SaleDetailModal({ sale, onClose }: { sale: SaleRow | null; onClose: () 
 
   if (!sale) return null;
 
+  const isGram = sale.product?.unit_type === 'gram';
   const profit = (sale.unit_price - sale.unit_cost) * sale.qty;
   const durasi = sale.batch?.received_at
     ? Math.round((new Date(sale.sold_at).getTime() - new Date(sale.batch.received_at).getTime()) / 86400000)
@@ -201,8 +202,8 @@ function SaleDetailModal({ sale, onClose }: { sale: SaleRow | null; onClose: () 
       <p className="mb-4 text-xs text-ink-soft">{formatTanggalWaktu(sale.sold_at)}</p>
 
       <div className="mb-4 grid grid-cols-2 gap-2.5">
-        <DetailStat label="Qty Terjual" value={String(sale.qty)} />
-        <DetailStat label="Harga Satuan" value={rupiah(sale.unit_price)} />
+        <DetailStat label="Qty Terjual" value={formatQty(sale.qty, sale.product?.unit_type || 'pcs')} />
+        <DetailStat label="Harga Satuan" value={rupiah(isGram ? pricePerKgFromPerGram(sale.unit_price) : sale.unit_price) + (isGram ? '/kg' : '')} />
         <DetailStat label="Total" value={rupiah(sale.total)} highlight />
         <DetailStat label="Keuntungan" value={rupiah(profit)} good />
       </div>
@@ -212,8 +213,8 @@ function SaleDetailModal({ sale, onClose }: { sale: SaleRow | null; onClose: () 
         {durasi !== null && (
           <InfoLine icon={<Clock size={14} />} label="Lama di stok sebelum terjual" value={durasi <= 0 ? 'Hari yang sama' : `${durasi} hari`} />
         )}
-        <InfoLine icon={<TrendingUp size={14} />} label="Harga Modal Saat Itu" value={rupiah(sale.unit_cost)} />
-        <InfoLine icon={<Package size={14} />} label="Sisa Stok Produk Ini Sekarang" value={stok === null ? 'Memuat...' : String(stok)} />
+        <InfoLine icon={<TrendingUp size={14} />} label="Harga Modal Saat Itu" value={rupiah(isGram ? pricePerKgFromPerGram(sale.unit_cost) : sale.unit_cost) + (isGram ? '/kg' : '')} />
+        <InfoLine icon={<Package size={14} />} label="Sisa Stok Produk Ini Sekarang" value={stok === null ? 'Memuat...' : formatQty(stok, sale.product?.unit_type || 'pcs')} />
       </div>
     </Modal>
   );

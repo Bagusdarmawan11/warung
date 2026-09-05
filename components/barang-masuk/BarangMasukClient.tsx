@@ -8,7 +8,7 @@ import { BarcodeCanvas, downloadBarcodeAsPng } from '@/components/BarcodeCanvas'
 import { createProduct, addBatch } from '@/lib/actions/products';
 import { getProductSummaries } from '@/lib/actions/products';
 import { uploadProductImage } from '@/lib/uploadImage';
-import { rupiah, todayISO, formatQty, pricePerGramFromPerKg, pricePerKgFromPerGram } from '@/lib/format';
+import { rupiah, todayISO, formatQty, combineDateWithNowTime, pricePerGramFromPerKg, pricePerKgFromPerGram } from '@/lib/format';
 import type { Product, ProductStockSummary, UnitType } from '@/lib/types';
 
 export function BarangMasukClient() {
@@ -78,7 +78,7 @@ function ProdukBaruForm() {
       buyPrice,
       sellPrice,
       expiryDate: String(fd.get('expiryDate') || '') || null,
-      receivedAt: todayISO(),
+      receivedAt: combineDateWithNowTime(String(fd.get('receivedAt') || '') || todayISO()),
     });
     setSaving(false);
 
@@ -185,7 +185,10 @@ function ProdukBaruForm() {
         <Field label={unitType === 'gram' ? 'Harga Jual /kg *' : 'Harga Jual *'} hint={unitType === 'gram' ? 'Harga jual per KILOGRAM, bukan per gram' : undefined}>
           <Input name="sellPrice" type="number" step="any" min={0} required placeholder="0" />
         </Field>
-        <Field label="Tanggal Kadaluwarsa" full>
+        <Field label="Tanggal Barang Masuk" hint="Bisa diubah kalau input untuk hari sebelumnya">
+          <Input name="receivedAt" type="date" max={todayISO()} defaultValue={todayISO()} />
+        </Field>
+        <Field label="Tanggal Kadaluwarsa">
           <Input name="expiryDate" type="date" />
         </Field>
         <div className="sm:col-span-2">
@@ -238,7 +241,7 @@ function RestockForm() {
       buyPrice,
       sellPrice,
       expiryDate: String(fd.get('expiryDate') || '') || null,
-      receivedAt: todayISO(),
+      receivedAt: combineDateWithNowTime(String(fd.get('receivedAt') || '') || todayISO()),
     });
     setSaving(false);
     if (!res.ok) { toast.error(res.error); return; }
@@ -266,7 +269,7 @@ function RestockForm() {
                 className="flex w-full items-center justify-between border-t border-lilac-100 px-3 py-2.5 text-left text-sm first:border-t-0 hover:bg-lilac-50"
               >
                 <span className="font-medium">{p.name}</span>
-                <span className="font-mono text-[11px] text-ink-soft">{p.code} &middot; stok {p.stok}</span>
+                <span className="font-mono text-[11px] text-ink-soft">{p.code} &middot; stok {formatQty(p.stok, p.unit_type)}</span>
               </button>
             ))}
           </div>
@@ -285,6 +288,9 @@ function RestockForm() {
           <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
             <Field label={picked.unit_type === 'gram' ? 'Berat Tambahan (gram) *' : 'Qty Tambahan *'}>
               <Input name="qty" type="number" step="any" min={0} required placeholder="0" />
+            </Field>
+            <Field label="Tanggal Restock" hint="Bisa diubah kalau input untuk hari sebelumnya">
+              <Input name="receivedAt" type="date" max={todayISO()} defaultValue={todayISO()} />
             </Field>
             <Field label="Tanggal Kadaluwarsa Baru">
               <Input name="expiryDate" type="date" />

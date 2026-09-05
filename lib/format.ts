@@ -73,3 +73,17 @@ export function pricePerKgFromPerGram(pricePerGram: number): number {
 export function pricePerGramFromPerKg(pricePerKg: number): number {
   return (pricePerKg || 0) / 1000;
 }
+
+/**
+ * Gabungkan tanggal yang dipilih user (misal saat backdate transaksi/restock
+ * ke hari kemarin) dengan JAM SEKARANG, lalu hasilkan string ISO yang benar
+ * secara timezone (dikonversi lewat Date object, bukan digabung manual jadi
+ * string mentah - supaya tidak salah beberapa jam kalau device pemakai
+ * berada di zona waktu WIB/WITA/WIT).
+ */
+export function combineDateWithNowTime(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const now = new Date();
+  const combined = new Date(y, (m || 1) - 1, d || 1, now.getHours(), now.getMinutes(), now.getSeconds());
+  return combined.toISOString();
+}

@@ -22,7 +22,7 @@ export type CheckoutResult =
   | { ok: true; trxId: string }
   | { ok: false; error: string; kind: 'INSUFFICIENT_STOCK' | 'OTHER' };
 
-export async function checkoutCart(items: CheckoutItem[], buyerName: string, allowOversell = false): Promise<CheckoutResult> {
+export async function checkoutCart(items: CheckoutItem[], buyerName: string, allowOversell = false, soldAt?: string | null): Promise<CheckoutResult> {
   if (!items.length) return { ok: false, error: 'Keranjang kosong.', kind: 'OTHER' };
 
   const supabase = await createClient();
@@ -36,6 +36,7 @@ export async function checkoutCart(items: CheckoutItem[], buyerName: string, all
     p_items: payload,
     p_buyer_name: buyerName || null,
     p_allow_oversell: allowOversell,
+    p_sold_at: soldAt || null,
   });
 
   if (error) {
@@ -58,7 +59,7 @@ export interface HistoryRange {
 
 export async function getSalesHistory(range?: HistoryRange): Promise<SaleRow[]> {
   const supabase = await createClient();
-  let q = supabase.from('sales').select('*, batch:product_batches(received_at)').order('sold_at', { ascending: false }).limit(2000);
+  let q = supabase.from('sales').select('*, batch:product_batches(received_at), product:products(unit_type)').order('sold_at', { ascending: false }).limit(2000);
   if (range?.from) q = q.gte('sold_at', range.from);
   if (range?.to) q = q.lte('sold_at', range.to + 'T23:59:59');
   if (range?.search) q = q.ilike('product_name_snapshot', `%${range.search}%`);
@@ -69,13 +70,13 @@ export async function getSalesHistory(range?: HistoryRange): Promise<SaleRow[]> 
 
 export async function getStockInHistory(range?: HistoryRange): Promise<StockInHistoryRow[]> {
   const supabase = await createClient();
-  let q = supabase.from('stock_in_history').select('*').order('received_at', { ascending: false }).limit(3000);
+  let q = supabase.from('stock_in_history').select('*, product:products(unit_type)').order('received_at', { ascending: false }).limit(3000);
   if (range?.from) q = q.gte('received_at', range.from);
   if (range?.to) q = q.lte('received_at', range.to + 'T23:59:59');
   if (range?.search) q = q.ilike('product_name_snapshot', `%${range.search}%`);
   const { data, error } = await q;
   if (error) throw new Error(error.message);
-  return (data as StockInHistoryRow[]) || [];
+  return (data as any as StockInHistoryRow[]) || [];
 }
 
 export async function getProductStockById(productId: string): Promise<number | null> {
