@@ -32,7 +32,8 @@ Dibangun dengan **Next.js 15 (App Router) + Supabase + Tailwind**, siap deploy k
 - **Ubah Jenis Satuan**: kalau ada produk yang salah dibuat sebagai pcs padahal seharusnya gram (atau sebaliknya), bisa diperbaiki langsung dari popup Edit Produk — ada peringatan jelas bahwa angka stok yang sudah ada tidak ikut dikonversi otomatis (cuma cara sistem membacanya yang berubah).
 - **Sistem batch/lot FIFO otomatis**: tiap kali barang masuk, sistem membuat "batch" baru dengan harga & tanggal kadaluwarsanya sendiri. Penjualan otomatis dipotong dari batch **paling lama yang masih ada isinya**.
 - **Daftar Barang**: nomor urut, pagination 20/halaman, filter status (termasuk **Stok Bermasalah** = menipis+habis sekaligus), foto produk di tiap baris. **Tekan nama produk** untuk buka **popup detail** (stok, harga modal, harga jual, estimasi untung, tanggal masuk terakhir & kadaluwarsa — rinci di atas, tombol Edit terpisah di bawahnya) plus tab **Riwayat Transaksi**. **Tekan & tahan** untuk mode pilih banyak (hapus/unduh barcode massal).
-- **Riwayat**: nomor urut, pagination, satuan qty selalu jelas (gram/kg/pcs), klik transaksi untuk detail (pembeli, keuntungan, lama barang di stok dalam hari, sisa stok), unduh **PDF** laporan penjualan.
+- **Riwayat**: penjualan dikelompokkan per **pembeli + tanggal** (beberapa kali transaksi orang yang sama di hari yang sama jadi 1 baris) — tekan untuk lihat semua produk yang dibeli, tekan salah satu produknya untuk detail lengkap (harga jual, keuntungan, lama barang di stok, sisa stok). Ada tombol **Edit Transaksi** di popup detail untuk memperbaiki salah input (tanggal, qty, harga jual, nama pembeli) — kalau qty diubah, stok otomatis ikut disesuaikan. Satuan qty selalu jelas (gram/kg/pcs). Unduh **PDF** laporan penjualan.
+- **Laporan WhatsApp Otomatis** (opsional): kirim rekap harian/mingguan/bulanan ke WhatsApp kamu sendiri lewat Fonnte, terjadwal otomatis sekitar tengah malam.
 - **Login wajib** (Supabase Auth).
 - **Footer** modern & **navbar liquid glass** (efek kaca buram melayang, ala iOS) di semua halaman.
 - **Desain**: modern, minimalis, pastel, responsif.
@@ -101,7 +102,7 @@ npm install
 3. Tunggu ± 2 menit sampai project selesai dibuat.
 4. Di sidebar kiri, klik **SQL Editor** → **New query**.
 5. Buka file `supabase/migrations/0001_init.sql` di project ini, **copy semua isinya**, paste ke SQL Editor, klik **Run**. Tunggu sampai sukses (tulisan hijau "Success").
-6. Ulangi langkah yang sama untuk **`0002_functions.sql`**, lalu **`0003_checkout.sql`**, lalu **`0004_security_hardening.sql`**, lalu **`0005_bulk_import.sql`**, lalu **`0006_import_sales_history.sql`**, lalu **`0007_product_images_and_history.sql`**, lalu **`0008_precise_timestamps.sql`**, lalu **`0009_merge_products.sql`**, lalu **`0010_import_fifo_redesign.sql`**, lalu **`0011_custom_dates_and_info.sql`** — **urutannya harus persis seperti ini** (0001 → 0002 → ... → 0011), karena tiap file bergantung pada file sebelumnya.
+6. Ulangi langkah yang sama untuk **`0002_functions.sql`**, lalu **`0003_checkout.sql`**, lalu **`0004_security_hardening.sql`**, lalu **`0005_bulk_import.sql`**, lalu **`0006_import_sales_history.sql`**, lalu **`0007_product_images_and_history.sql`**, lalu **`0008_precise_timestamps.sql`**, lalu **`0009_merge_products.sql`**, lalu **`0010_import_fifo_redesign.sql`**, lalu **`0011_custom_dates_and_info.sql`**, lalu **`0012_edit_sale_transaction.sql`** — **urutannya harus persis seperti ini** (0001 → 0002 → ... → 0012), karena tiap file bergantung pada file sebelumnya.
 
    > ⚠️ **Jangan lewati file `0004_security_hardening.sql`.** File ini menutup celah keamanan penting (tanpa file ini, siapa pun yang tahu URL Supabase-mu bisa memanggil fungsi checkout/tambah produk tanpa login). Lihat bagian [Keamanan](#keamanan).
 
@@ -329,6 +330,7 @@ psql -d warungtest -f supabase/migrations/0008_precise_timestamps.sql
 psql -d warungtest -f supabase/migrations/0009_merge_products.sql
 psql -d warungtest -f supabase/migrations/0010_import_fifo_redesign.sql
 psql -d warungtest -f supabase/migrations/0011_custom_dates_and_info.sql
+psql -d warungtest -f supabase/migrations/0012_edit_sale_transaction.sql
 psql -d warungtest -f supabase/test/01_test_anon_blocked.sql
 psql -d warungtest -f supabase/test/02_test_fifo_checkout.sql
 psql -d warungtest -f supabase/test/03_test_bulk_import.sql
@@ -338,7 +340,34 @@ psql -d warungtest -f supabase/test/05_test_batch_link.sql
 
 ---
 
-## Batasan & Catatan
+## Laporan WhatsApp Otomatis
+
+Sistem bisa otomatis mengirim laporan penjualan lewat WhatsApp ke nomor kamu setiap hari sekitar jam 00:00 WIB — laporan **harian** (tiap hari), **mingguan** (tiap Senin, rekap 7 hari terakhir), dan **bulanan** (tiap tanggal 1, rekap bulan yang baru selesai). Isinya: omset, keuntungan, jumlah transaksi, produk terlaris, dan top pelanggan (berdasarkan omset, frekuensi, & keuntungan).
+
+Fitur ini pakai [Fonnte](https://fonnte.com) (layanan pihak ketiga, bukan WhatsApp Business API resmi — baca kebijakan mereka sendiri) untuk mengirim pesan, dan **Vercel Cron Jobs** untuk menjadwalkannya.
+
+### Setup
+
+1. **Daftar & siapkan device Fonnte:**
+   - Buka [fonnte.com](https://fonnte.com) → daftar akun.
+   - Di dashboard, klik **Device** → **Add Device** → scan QR code pakai WhatsApp di HP kamu (yang mau dipakai buat kirim laporan). Device harus berstatus **Connected**.
+   - Di halaman device itu juga, salin **Token**-nya (klik, otomatis ke-copy).
+2. **Tambahkan environment variable** (lihat cara di bagian [Mengubah/menambah environment variable](#mengubah--menambah-environment-variable-di-project-yang-sudah-di-deploy) di atas):
+   - `FONNTE_TOKEN` — token yang tadi disalin.
+   - `FONNTE_TARGET` — nomor WhatsApp **kamu** yang mau menerima laporan, format `62xxxxxxxxxx` (kode negara 62, tanpa tanda + atau 0 di depan). Cth: nomor `0812-3456-7890` ditulis `6281234567890`.
+   - `CRON_SECRET` — string acak bebas buat keamanan (misal generate di [generate-secret.vercel.app/32](https://generate-secret.vercel.app/32)), supaya endpoint laporan tidak bisa dipicu sembarang orang.
+   - `SUPABASE_SERVICE_ROLE_KEY` — **wajib diisi juga di Vercel** untuk fitur ini (kalau sebelumnya cuma diisi di lokal buat script import, sekarang tambahkan juga sebagai environment variable Vercel). Ambil dari Supabase Dashboard → Project Settings → API → `service_role` key.
+3. **Redeploy** project (env var baru butuh redeploy supaya kepakai, DAN supaya `vercel.json` yang berisi jadwal cron-nya terdaftar).
+4. Setelah redeploy, buka tab **Cron Jobs** di Vercel Dashboard project kamu untuk pastikan job `/api/cron/daily-report` sudah terdaftar aktif.
+
+### Catatan penting
+
+- **Waktu tidak presis ke detik**: Vercel (paket gratis/Hobby) hanya menjamin cron jalan **di dalam jam** yang dijadwalkan, jadi laporan bisa muncul kapan saja antara jam 00:00-00:59 WIB, bukan pas jam 00:00:00 detik.
+- **Kalau salah satu environment variable (`FONNTE_TOKEN`/`FONNTE_TARGET`) kosong**, fitur ini otomatis nonaktif tanpa mengganggu bagian lain aplikasi.
+- Mau tes manual tanpa nunggu tengah malam? Buka `https://<url-warung-kamu>/api/cron/daily-report` di browser dengan header `Authorization: Bearer <CRON_SECRET kamu>` (bisa pakai extension seperti "ModHeader" di Chrome, atau tools seperti Postman/Insomnia) — response JSON-nya akan kasih tahu laporan mana saja yang berhasil/gagal dikirim.
+- Device Fonnte pakai WhatsApp HP biasa (bukan WhatsApp Business API resmi Meta) — kalau HP-nya mati/tidak konek internet/logout WhatsApp Web, laporan otomatis gagal terkirim sampai device connect lagi.
+
+
 
 - **Cara A (import lewat browser)** meniru riwayat barang masuk **baris-per-baris** (tiap baris restock jadi batch tersendiri, persis kalau kamu tambah stok manual berkali-kali) dan penjualan lama benar-benar memotong stok lewat mekanisme FIFO yang sama dengan Kasir. Import Barang Masuk & Penjualan masing-masing **hanya bisa dijalankan sekali** per database (percobaan berikutnya otomatis dilewati, supaya stok tidak dobel) — kalau perlu ulang, jalankan `supabase/scripts/reset_data.sql` dulu.
 - **Cara B (`scripts/import-legacy-csv.mjs`, CLI lokal)** masih memakai logika lama yang lebih sederhana (meringkas tiap produk jadi 1 batch gabungan, bukan baris-per-baris) — kalau bisa, lebih disarankan pakai Cara A untuk hasil yang lebih detail & akurat.

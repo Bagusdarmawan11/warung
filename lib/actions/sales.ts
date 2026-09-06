@@ -85,3 +85,31 @@ export async function getProductStockById(productId: string): Promise<number | n
   if (error) throw new Error(error.message);
   return data ? (data as any).stok : null;
 }
+
+export interface UpdateSaleInput {
+  saleId: string;
+  qty: number;
+  unitPrice: number;
+  buyerName: string;
+  soldAt: string; // ISO timestamp
+}
+
+/**
+ * Perbaiki transaksi penjualan yang salah input (misal salah ketik qty,
+ * harga, tanggal, atau nama pembeli). Kalau qty berubah, stok produk
+ * otomatis disesuaikan (dikembalikan/dipotong lagi) di batch yang sama
+ * persis dengan transaksi aslinya - jadi tidak perlu utak-atik database
+ * manual sama sekali.
+ */
+export async function updateSaleTransaction(input: UpdateSaleInput): Promise<{ ok: true; data: SaleRow } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc('update_sale_transaction', {
+    p_sale_id: input.saleId,
+    p_qty: input.qty,
+    p_unit_price: input.unitPrice,
+    p_buyer_name: input.buyerName || null,
+    p_sold_at: input.soldAt,
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data: data as SaleRow };
+}
