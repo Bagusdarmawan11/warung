@@ -134,7 +134,6 @@ function buildMessage(period: ReportPeriod, sales: SaleForReport[], namaWarung: 
   const judul = period.kind === 'harian' ? 'Laporan Harian' : period.kind === 'mingguan' ? 'Laporan Mingguan' : 'Laporan Bulanan';
   const omzet = sales.reduce((s, r) => s + r.total, 0);
   const untung = sales.reduce((s, r) => s + (r.unit_price - r.unit_cost) * r.qty, 0);
-  const jumlahItem = sales.reduce((s, r) => s + r.qty, 0);
   const jumlahTrx = new Set(sales.map((s) => s.trx_id)).size;
 
   let msg = `📊 *${judul} - ${namaWarung}*\n${period.label}\n\n`;
@@ -144,7 +143,7 @@ function buildMessage(period: ReportPeriod, sales: SaleForReport[], namaWarung: 
     return msg;
   }
 
-  msg += `💰 *Ringkasan*\nOmset: ${rupiah(omzet)}\nUntung: ${rupiah(untung)}\nTransaksi: ${jumlahTrx}\nItem Terjual: ${jumlahItem.toLocaleString('id-ID')}\n\n`;
+  msg += `💰 *Ringkasan*\nOmset: ${rupiah(omzet)}\nUntung: ${rupiah(untung)}\nTransaksi: ${jumlahTrx}\n\n`;
 
   const buyersWithName = sales.filter((s) => s.buyer_name?.trim());
   const bestProducts = topN(sales, (s) => s.product_name_snapshot, (s) => s.qty, 3);

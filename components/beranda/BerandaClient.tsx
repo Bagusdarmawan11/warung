@@ -9,10 +9,11 @@ import {
 import { Card, Badge, EmptyState, ToggleGroup, Input } from '@/components/ui';
 import { TrendChartToggle } from '@/components/beranda/TrendChartToggle';
 import { BestSellerChart } from '@/components/beranda/BestSellerChart';
-import { aggregateByPeriod, bestSellers, restockPrediction, summarize, topBuyers } from '@/lib/analytics';
+import { aggregateByPeriod, bestSellers, restockPrediction, summarize, topBuyers, type TopBuyerSortBy } from '@/lib/analytics';
 import { getSalesHistory, getStockInHistory } from '@/lib/actions/sales';
-import { rupiah, formatTanggal, todayISO, daysUntil, startOfWeekISO, startOfMonthISO, startOfYearISO } from '@/lib/format';
+import { rupiah, formatTanggal, formatTanggalWaktu, formatQty, todayISO, daysUntil, startOfWeekISO, startOfMonthISO, startOfYearISO } from '@/lib/format';
 import type { SaleRow, StockInHistoryRow, ProductStockSummary } from '@/lib/types';
+import { Modal } from '@/components/Modal';
 
 type FinancePeriod = 'today' | 'week' | 'month' | 'year' | 'custom';
 
@@ -31,7 +32,7 @@ export function BerandaClient({
 
   const today = todayISO();
   const salesToday = sales.filter((s) => s.sold_at.slice(0, 10) === today);
-  const { omzet: omzetToday, untung: untungToday, jumlahItem: itemToday } = summarize(salesToday);
+  const { omzet: omzetToday, untung: untungToday, jumlahTrx: trxToday, jumlahProdukTerjual: produkToday } = summarize(salesToday);
 
   // ---------------------------------------------------------------------
   // Keuangan periode (bisa dipilih: hari ini / minggu ini / bulan ini /
@@ -89,12 +90,29 @@ export function BerandaClient({
     .sort((a, b) => (daysUntil(a.kadaluwarsa_terdekat) ?? 0) - (daysUntil(b.kadaluwarsa_terdekat) ?? 0));
 
   const [bestSortBy, setBestSortBy] = useState<'omzet' | 'untung' | 'frekuensi'>('omzet');
+  const [buyerSortBy, setBuyerSortBy] = useState<'omzet' | 'untung' | 'frekuensi'>('omzet');
+
+  // Modal detail: produk terlaris
+  const [detailProduct, setDetailProduct] = useState<string | null>(null);
+  // Modal detail: top pelanggan
+  const [detailBuyer, setDetailBuyer] = useState<string | null>(null);
 
   const trend = useMemo(() => aggregateByPeriod(sales, period).map((t) => ({ label: t.label, omzet: t.omzet })), [sales, period]);
   const best = useMemo(() => bestSellers(sales, 8, bestSortBy), [sales, bestSortBy]);
-  const topCustomers = useMemo(() => topBuyers(sales, 8), [sales]);
+  const topCustomers = useMemo(() => topBuyers(sales, 8, buyerSortBy), [sales, buyerSortBy]);
   const restock = useMemo(() => restockPrediction(sales, products), [sales, products]);
   const totals120 = useMemo(() => summarize(sales), [sales]);
+
+  // Transaksi produk yang dipilih
+  const detailProductSales = useMemo(() =>
+    detailProduct ? sales.filter((s) => s.product_name_snapshot === detailProduct).sort((a, b) => b.sold_at.localeCompare(a.sold_at)) : [],
+    [sales, detailProduct]
+  );
+  // Transaksi pelanggan yang dipilih
+  const detailBuyerSales = useMemo(() =>
+    detailBuyer ? sales.filter((s) => (s.buyer_name || '').trim() === detailBuyer).sort((a, b) => b.sold_at.localeCompare(a.sold_at)) : [],
+    [sales, detailBuyer]
+  );
 
   async function generateAiInsight() {
     setAiState({ loading: true, text: null, reason: null });
@@ -135,7 +153,8 @@ export function BerandaClient({
         <div className="flex flex-wrap gap-6">
           <div><p className="font-mono text-2xl font-bold">{rupiah(omzetToday)}</p><p className="text-[11px] text-cream/60">Omzet</p></div>
           <div><p className="font-mono text-2xl font-bold text-mint-200">{rupiah(untungToday)}</p><p className="text-[11px] text-cream/60">Estimasi Untung</p></div>
-          <div><p className="font-mono text-2xl font-bold">{itemToday}</p><p className="text-[11px] text-cream/60">Item Terjual</p></div>
+          <div><p className="font-mono text-2xl font-bold">{trxToday}</p><p className="text-[11px] text-cream/60">Transaksi</p></div>
+          <div><p className="font-mono text-2xl font-bold">{produkToday}</p><p className="text-[11px] text-cream/60">Jenis Produk</p></div>
         </div>
       </div>
 
@@ -234,32 +253,87 @@ export function BerandaClient({
           options={[{ value: 'omzet', label: 'Omzet' }, { value: 'untung', label: 'Untung' }, { value: 'frekuensi', label: 'Frekuensi' }]}
         />
       </div>
+      <p className="mb-2 text-[11px] text-ink-soft">Ketuk nama produk untuk lihat riwayat transaksinya.</p>
       <Card className="mb-6">
-        {best.length === 0 ? <EmptyState title="Belum ada penjualan" /> : <BestSellerChart data={best} sortBy={bestSortBy} />}
+        {best.length === 0 ? <EmptyState title="Belum ada penjualan" /> : (
+          <div className="space-y-0">
+            {best.map((item, i) => {
+              const valueKey = bestSortBy === 'untung' ? 'untung' : bestSortBy === 'frekuensi' ? 'jumlah_transaksi' : 'omzet';
+              const value = (item as any)[valueKey];
+              const maxVal = (best[0] as any)[valueKey] || 1;
+              const pct = Math.round((value / maxVal) * 100);
+              const COLORS = ['#FF9D5C', '#A78CE8', '#63C89C', '#54BAF5', '#FB7797', '#FFC933', '#F5813F', '#8C6DDB'];
+              return (
+                <button
+                  key={item.product_name}
+                  onClick={() => setDetailProduct(item.product_name)}
+                  className="flex w-full items-center gap-3 rounded-xl px-1 py-2 text-left transition hover:bg-lilac-50 active:bg-lilac-100"
+                >
+                  <div className="w-28 shrink-0 text-right text-[11px] font-semibold leading-snug text-ink">{item.product_name}</div>
+                  <div className="flex-1">
+                    <div className="flex h-[18px] items-center rounded-full overflow-hidden bg-lilac-50">
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{ width: `${pct}%`, backgroundColor: COLORS[i % COLORS.length] }}
+                      />
+                    </div>
+                  </div>
+                  <div className="w-20 shrink-0 text-right font-mono text-[11px] font-bold text-ink-soft">
+                    {bestSortBy === 'frekuensi' ? `${value}x` : rupiah(value)}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </Card>
 
       {/* Top pelanggan */}
-      <h2 className="mb-3 flex items-center gap-1.5 font-display text-base font-bold text-ink"><Crown size={17} className="text-butter-500" /> Top Pelanggan</h2>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="flex items-center gap-1.5 font-display text-base font-bold text-ink"><Crown size={17} className="text-butter-500" /> Top Pelanggan</h2>
+        <ToggleGroup
+          value={buyerSortBy}
+          onChange={(v) => setBuyerSortBy(v as any)}
+          options={[{ value: 'omzet', label: 'Omzet' }, { value: 'untung', label: 'Untung' }, { value: 'frekuensi', label: 'Frekuensi' }]}
+        />
+      </div>
       {topCustomers.length === 0 ? (
         <EmptyState title="Belum ada data pembeli" hint="Nama pembeli tercatat otomatis dari transaksi kasir & import." />
       ) : (
         <div className="mb-6 space-y-2">
           {topCustomers.map((c, i) => (
-            <Card key={c.buyer_name} tight className="flex items-center gap-3">
-              <div className={`flex h-8 w-8 flex-none items-center justify-center rounded-full font-mono text-xs font-bold ${
-                i === 0 ? 'bg-butter-300 text-ink' : i === 1 ? 'bg-lilac-200 text-ink' : i === 2 ? 'bg-peach-200 text-ink' : 'bg-lilac-50 text-ink-soft'
-              }`}>
-                {i + 1}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-ink">{c.buyer_name}</p>
-                <p className="text-[11px] text-ink-soft">{c.jumlah_transaksi} transaksi &middot; terakhir {formatTanggal(c.terakhir_belanja.slice(0, 10))}</p>
-              </div>
-              <p className="flex-none font-mono text-sm font-bold text-peach-500">{rupiah(c.total_belanja)}</p>
-            </Card>
+            <button key={c.buyer_name} onClick={() => setDetailBuyer(c.buyer_name)} className="block w-full text-left">
+              <Card tight className="flex items-center gap-3 transition hover:border-peach-200">
+                <div className={`flex h-8 w-8 flex-none items-center justify-center rounded-full font-mono text-xs font-bold ${
+                  i === 0 ? 'bg-butter-300 text-ink' : i === 1 ? 'bg-lilac-200 text-ink' : i === 2 ? 'bg-peach-200 text-ink' : 'bg-lilac-50 text-ink-soft'
+                }`}>{i + 1}</div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold leading-snug text-ink">{c.buyer_name}</p>
+                  <p className="text-[11px] text-ink-soft">{c.jumlah_transaksi}x transaksi &middot; terakhir {formatTanggal(c.terakhir_belanja.slice(0, 10))}</p>
+                </div>
+                <div className="flex-none text-right">
+                  <p className="font-mono text-sm font-bold text-peach-500">{rupiah(c.total_belanja)}</p>
+                  <p className="font-mono text-[10px] text-mint-600">+{rupiah(c.total_untung)}</p>
+                </div>
+              </Card>
+            </button>
           ))}
         </div>
       )}
+
+      {/* Modal: riwayat transaksi produk */}
+      <DetailProductModal
+        productName={detailProduct}
+        sales={detailProductSales}
+        onClose={() => setDetailProduct(null)}
+      />
+
+      {/* Modal: riwayat transaksi pelanggan */}
+      <DetailBuyerModal
+        buyerName={detailBuyer}
+        sales={detailBuyerSales}
+        onClose={() => setDetailBuyer(null)}
+      />
 
       {/* Restock prediction */}
       <h2 className="mb-3 flex items-center gap-1.5 font-display text-base font-bold text-ink"><PackageSearch size={17} className="text-sky-500" /> Prediksi Kebutuhan Restock</h2>
@@ -320,6 +394,88 @@ export function BerandaClient({
         viewAllHref={`/produk?status=expired&days=${expiryDays}`}
       />
     </div>
+  );
+}
+
+function DetailProductModal({ productName, sales, onClose }: { productName: string | null; sales: SaleRow[]; onClose: () => void }) {
+  if (!productName) return null;
+  const totalOmzet = sales.reduce((s, r) => s + r.total, 0);
+  const totalUntung = sales.reduce((s, r) => s + (r.unit_price - r.unit_cost) * r.qty, 0);
+  const isGram = sales[0]?.product?.unit_type === 'gram';
+  return (
+    <Modal open={!!productName} onClose={onClose} title={productName}>
+      <div className="mb-3 grid grid-cols-3 gap-2 text-center">
+        <div className="rounded-xl bg-lilac-50 p-2">
+          <p className="text-[10px] font-bold uppercase text-ink-soft">Transaksi</p>
+          <p className="font-mono text-sm font-bold text-ink">{sales.length}x</p>
+        </div>
+        <div className="rounded-xl bg-lilac-50 p-2">
+          <p className="text-[10px] font-bold uppercase text-ink-soft">Omzet</p>
+          <p className="font-mono text-sm font-bold text-ink">{rupiah(totalOmzet)}</p>
+        </div>
+        <div className="rounded-xl bg-lilac-50 p-2">
+          <p className="text-[10px] font-bold uppercase text-ink-soft">Untung</p>
+          <p className="font-mono text-sm font-bold text-mint-600">{rupiah(totalUntung)}</p>
+        </div>
+      </div>
+      {sales.length === 0 ? <p className="py-4 text-center text-sm text-ink-soft">Tidak ada transaksi di periode ini.</p> : (
+        <div className="max-h-[55vh] space-y-2 overflow-y-auto">
+          {sales.map((s) => (
+            <div key={s.id} className="flex items-center gap-3 rounded-xl border border-lilac-100 p-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] text-ink-soft">{formatTanggalWaktu(s.sold_at)}</p>
+                <p className="text-xs font-semibold text-ink">{s.buyer_name || 'Tanpa nama'}</p>
+              </div>
+              <div className="flex-none text-right">
+                <p className="font-mono text-xs font-bold text-ink">{rupiah(s.total)}</p>
+                <p className="font-mono text-[10px] text-mint-600">+{rupiah((s.unit_price - s.unit_cost) * s.qty)}</p>
+                <p className="text-[10px] text-ink-soft">{formatQty(s.qty, isGram ? 'gram' : 'pcs')}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+function DetailBuyerModal({ buyerName, sales, onClose }: { buyerName: string | null; sales: SaleRow[]; onClose: () => void }) {
+  if (!buyerName) return null;
+  const totalOmzet = sales.reduce((s, r) => s + r.total, 0);
+  const totalUntung = sales.reduce((s, r) => s + (r.unit_price - r.unit_cost) * r.qty, 0);
+  return (
+    <Modal open={!!buyerName} onClose={onClose} title={buyerName}>
+      <div className="mb-3 grid grid-cols-3 gap-2 text-center">
+        <div className="rounded-xl bg-lilac-50 p-2">
+          <p className="text-[10px] font-bold uppercase text-ink-soft">Transaksi</p>
+          <p className="font-mono text-sm font-bold text-ink">{sales.length}x</p>
+        </div>
+        <div className="rounded-xl bg-lilac-50 p-2">
+          <p className="text-[10px] font-bold uppercase text-ink-soft">Omzet</p>
+          <p className="font-mono text-sm font-bold text-ink">{rupiah(totalOmzet)}</p>
+        </div>
+        <div className="rounded-xl bg-lilac-50 p-2">
+          <p className="text-[10px] font-bold uppercase text-ink-soft">Untung</p>
+          <p className="font-mono text-sm font-bold text-mint-600">{rupiah(totalUntung)}</p>
+        </div>
+      </div>
+      {sales.length === 0 ? <p className="py-4 text-center text-sm text-ink-soft">Tidak ada transaksi di periode ini.</p> : (
+        <div className="max-h-[55vh] space-y-2 overflow-y-auto">
+          {sales.map((s) => (
+            <div key={s.id} className="flex items-center gap-3 rounded-xl border border-lilac-100 p-3">
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold leading-snug text-ink">{s.product_name_snapshot}</p>
+                <p className="text-[11px] text-ink-soft">{formatTanggalWaktu(s.sold_at)}</p>
+              </div>
+              <div className="flex-none text-right">
+                <p className="font-mono text-xs font-bold text-ink">{rupiah(s.total)}</p>
+                <p className="font-mono text-[10px] text-mint-600">+{rupiah((s.unit_price - s.unit_cost) * s.qty)}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Modal>
   );
 }
 
