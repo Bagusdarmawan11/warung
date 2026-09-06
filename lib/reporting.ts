@@ -174,5 +174,29 @@ function buildMessage(period: ReportPeriod, sales: SaleForReport[], namaWarung: 
 
 export async function buildReportMessage(period: ReportPeriod, namaWarung: string): Promise<string> {
   const sales = await fetchSalesForPeriod(period);
-  return buildMessage(period, sales, namaWarung);
+  let message = buildMessage(period, sales, namaWarung);
+
+  // Laporan mingguan: tambahkan daftar produk mengendap (tidak laku 14 hari+)
+  if (period.kind === 'mingguan') {
+    try {
+      const supabase = createServiceClient();
+      const { data } = await supabase.rpc('get_slow_moving_products', { p_days_threshold: 14 });
+      const slowItems = (data as any[]) || [];
+      if (slowItems.length > 0) {
+        message += `\n\n📦 *Produk Mengendap (stok ada, tidak laku >14 hari)*\n`;
+        slowItems.forEach((p: any, i: number) => {
+          const stok = p.unit_type === 'gram'
+            ? (p.stok >= 1000 ? `${(p.stok / 1000).toFixed(1)} kg` : `${p.stok} gr`)
+            : `${p.stok} pcs`;
+          const since = p.last_sold_at
+            ? `${p.days_since_sold} hari tidak laku`
+            : 'Belum pernah terjual';
+          message += `${i + 1}. ${p.product_name} (stok: ${stok}) — ${since}\n`;
+        });
+        message += `_Pertimbangkan diskon atau tawarkan ke pelanggan tetap._`;
+      }
+    } catch { /* produk mengendap opsional, tidak perlu block laporan utama */ }
+  }
+
+  return message;
 }

@@ -1,6 +1,7 @@
 import { getProductSummaries } from '@/lib/actions/products';
 import { getSalesHistory, getStockInHistory } from '@/lib/actions/sales';
 import { BerandaClient } from '@/components/beranda/BerandaClient';
+import { RoleGuard } from '@/components/RoleGuard';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,5 +13,5 @@ export default async function BerandaPage() {
     getStockInHistory({ from: from120 }),
   ]);
 
-  return <BerandaClient products={products} sales={sales} stockIn={stockIn} />;
+  return <RoleGuard requires="admin"><BerandaClient products={products} sales={sales} stockIn={stockIn} /></RoleGuard>;
 }

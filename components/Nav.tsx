@@ -2,19 +2,24 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutGrid, ScanLine, PackagePlus, Boxes, History, LogOut } from 'lucide-react';
+import { LayoutGrid, ScanLine, PackagePlus, Boxes, History, LogOut, Settings } from 'lucide-react';
 import { signOut } from '@/lib/actions/auth';
+import { useRole } from '@/lib/RoleContext';
 
 const NAV_ITEMS = [
-  { href: '/', label: 'Beranda', icon: LayoutGrid },
-  { href: '/kasir', label: 'Kasir', icon: ScanLine },
-  { href: '/barang-masuk', label: 'Barang Masuk', icon: PackagePlus },
-  { href: '/produk', label: 'Produk', icon: Boxes },
-  { href: '/riwayat', label: 'Riwayat', icon: History },
-];
+  { href: '/', label: 'Beranda', icon: LayoutGrid, requires: 'admin' },
+  { href: '/kasir', label: 'Kasir', icon: ScanLine, requires: 'kasir' },
+  { href: '/barang-masuk', label: 'Barang Masuk', icon: PackagePlus, requires: 'admin' },
+  { href: '/produk', label: 'Produk', icon: Boxes, requires: 'kasir' },
+  { href: '/riwayat', label: 'Riwayat', icon: History, requires: 'admin' },
+] as const;
+
+const LEVEL: Record<string, number> = { kasir: 1, admin: 2, owner: 3 };
 
 export function TopNav({ namaWarung }: { namaWarung: string }) {
   const pathname = usePathname();
+  const { role } = useRole();
+  const visibleItems = NAV_ITEMS.filter((item) => role && LEVEL[role] >= LEVEL[item.requires]);
 
   return (
     <header className="sticky top-3 z-30 mx-auto w-full max-w-6xl px-3 sm:px-6">
@@ -36,7 +41,7 @@ export function TopNav({ namaWarung }: { namaWarung: string }) {
         </div>
 
         <nav className="relative hidden items-center gap-1 md:flex">
-          {NAV_ITEMS.map((item) => {
+          {visibleItems.map((item) => {
             const active = pathname === item.href;
             const Icon = item.icon;
             return (
@@ -54,15 +59,26 @@ export function TopNav({ namaWarung }: { namaWarung: string }) {
           })}
         </nav>
 
-        <form action={signOut} className="relative">
-          <button
-            type="submit"
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-white/70 bg-white/60 text-ink-soft transition hover:bg-white"
-            title="Keluar"
-          >
-            <LogOut size={16} />
-          </button>
-        </form>
+        <div className="relative flex items-center gap-1">
+          {role === 'owner' && (
+            <Link
+              href="/pengaturan"
+              className={`flex h-9 w-9 items-center justify-center rounded-full border transition ${pathname === '/pengaturan' ? 'border-peach-300 bg-peach-50 text-peach-500' : 'border-white/70 bg-white/60 text-ink-soft hover:bg-white'}`}
+              title="Pengaturan pengguna"
+            >
+              <Settings size={16} />
+            </Link>
+          )}
+          <form action={signOut}>
+            <button
+              type="submit"
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/70 bg-white/60 text-ink-soft transition hover:bg-white"
+              title="Keluar"
+            >
+              <LogOut size={16} />
+            </button>
+          </form>
+        </div>
       </div>
     </header>
   );
@@ -70,11 +86,13 @@ export function TopNav({ namaWarung }: { namaWarung: string }) {
 
 export function BottomNav() {
   const pathname = usePathname();
+  const { role } = useRole();
+  const visibleItems = NAV_ITEMS.filter((item) => role && LEVEL[role] >= LEVEL[item.requires]);
   return (
     <nav className="fixed inset-x-3 bottom-3 z-30 md:hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
       <div className="relative mx-auto flex max-w-md items-center justify-between overflow-hidden rounded-[28px] border border-white/60 bg-white/60 px-1.5 py-1.5 shadow-[0_10px_40px_-10px_rgba(46,42,61,0.35)] backdrop-blur-2xl backdrop-saturate-150">
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/90 to-transparent" />
-        {NAV_ITEMS.map((item) => {
+        {visibleItems.map((item) => {
           const active = pathname === item.href;
           const Icon = item.icon;
           return (
