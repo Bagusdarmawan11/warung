@@ -7,7 +7,7 @@ import { Button, Card, Input, Field, EmptyState } from '@/components/ui';
 import { Modal, ConfirmDialog } from '@/components/Modal';
 import { BarcodeScannerModal } from '@/components/BarcodeScannerModal';
 import { ImageLightbox } from '@/components/ImageLightbox';
-import { getProductByCode, getProductSummaries } from '@/lib/actions/products';
+import { getProductByCode, getProductSummaries, findProductByAnyBarcode } from '@/lib/actions/products';
 import { checkoutCart } from '@/lib/actions/sales';
 import { rupiah, formatQty, todayISO, combineDateWithNowTime, pricePerKgFromPerGram, pricePerGramFromPerKg } from '@/lib/format';
 import type { ProductStockSummary } from '@/lib/types';
@@ -109,7 +109,19 @@ export function KasirClient() {
     const q = raw.trim();
     if (!q) return;
     try {
+      // 1. Coba kode internal (BR0001 dst)
       let product = await getProductByCode(q);
+
+      // 2. Kalau tidak ketemu, coba barcode kemasan pabrik lewat fungsi DB
+      if (!product) {
+        const productId = await findProductByAnyBarcode(q);
+        if (productId) {
+          const results = await getProductSummaries({ search: productId });
+          product = results.find((p) => p.product_id === productId) || null;
+        }
+      }
+
+      // 3. Kalau masih tidak ketemu, coba cari by nama
       if (!product) {
         const results = await getProductSummaries({ search: q });
         if (results.length === 1) product = results[0];
@@ -118,8 +130,9 @@ export function KasirClient() {
           return;
         }
       }
+
       if (!product) {
-        toast.error(`Kode/nama "${q}" tidak ditemukan`);
+        toast.error(`Kode/nama/barcode "${q}" tidak ditemukan`);
         return;
       }
       handlePicked(product);

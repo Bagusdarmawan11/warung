@@ -6,6 +6,7 @@ import { Save, PlusCircle, MinusCircle, Layers, ImagePlus, Trash2 } from 'lucide
 import { Modal, ConfirmDialog } from '@/components/Modal';
 import { Button, Field, Input, Badge, Select } from '@/components/ui';
 import { getBatchesForProduct, updateProduct, updateBatchPrice, adjustStock, deleteProduct } from '@/lib/actions/products';
+import { ProductBarcodesManager } from '@/components/produk/ProductBarcodesManager';
 import { uploadProductImage } from '@/lib/uploadImage';
 import { rupiah, formatTanggal, formatQty, pricePerKgFromPerGram, pricePerGramFromPerKg } from '@/lib/format';
 import type { ProductBatch, ProductStockSummary } from '@/lib/types';
@@ -170,6 +171,8 @@ export function ProductEditModal({
           <Button variant="danger" size="sm" full onClick={() => handleAdjust(-1)}><MinusCircle size={14} /> Kurangi</Button>
         </div>
       </div>
+
+      <ProductBarcodesManager productId={product.product_id} />
 
       <div className="mb-5">
         <p className="mb-2 flex items-center gap-1.5 text-xs font-bold text-ink-soft"><Layers size={14} /> Riwayat Batch (FIFO — batch paling atas dipakai duluan)</p>

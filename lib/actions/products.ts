@@ -309,3 +309,60 @@ export async function mergeProducts(input: MergeProductsInput): Promise<ActionRe
   revalidateAll();
   return { ok: true, data: data as Product };
 }
+
+// ============================================================
+// Barcode Tambahan (kemasan produk)
+// ============================================================
+
+export interface ProductBarcode {
+  id: string;
+  product_id: string;
+  barcode: string;
+  label: string | null;
+  created_at: string;
+}
+
+export async function getProductBarcodes(productId: string): Promise<ProductBarcode[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('product_barcodes')
+    .select('*')
+    .eq('product_id', productId)
+    .order('created_at', { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data as ProductBarcode[]) || [];
+}
+
+export async function addProductBarcode(productId: string, barcode: string, label?: string): Promise<ActionResult<ProductBarcode>> {
+  const supabase = await createClient();
+  const cleaned = barcode.trim();
+  if (!cleaned) return { ok: false, error: 'Barcode tidak boleh kosong' };
+
+  const { data, error } = await supabase
+    .from('product_barcodes')
+    .insert({ product_id: productId, barcode: cleaned, label: label?.trim() || null })
+    .select()
+    .single();
+  if (error) {
+    if (error.code === '23505') return { ok: false, error: 'Barcode ini sudah terdaftar untuk produk lain. Tiap barcode hanya boleh untuk 1 produk.' };
+    return { ok: false, error: error.message };
+  }
+  revalidateAll();
+  return { ok: true, data: data as ProductBarcode };
+}
+
+export async function deleteProductBarcode(barcodeId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.from('product_barcodes').delete().eq('id', barcodeId);
+  if (error) return { ok: false, error: error.message };
+  revalidateAll();
+  return { ok: true, data: undefined };
+}
+
+/** Cari produk berdasarkan barcode apapun (kode internal BR0001 ATAU barcode kemasan). */
+export async function findProductByAnyBarcode(barcode: string): Promise<string | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc('find_product_by_any_barcode', { p_barcode: barcode });
+  if (error || !data) return null;
+  return data as string;
+}
