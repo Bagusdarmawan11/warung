@@ -4,11 +4,17 @@
 
 html {
   -webkit-tap-highlight-color: transparent;
+  /* Cegah zoom & overflow horizontal yang bikin layout geser di HP */
+  overflow-x: hidden;
+  touch-action: pan-x pan-y;
 }
 
 body {
   background: #FFFBF3;
   color: #2E2A3D;
+  /* Pastikan tidak ada elemen yang meluber keluar layar */
+  overflow-x: hidden;
+  max-width: 100vw;
 }
 
 * {

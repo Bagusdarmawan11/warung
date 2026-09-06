@@ -159,27 +159,29 @@ export function BerandaClient({
       </div>
 
       {/* Pemasukan / Pengeluaran / Profit - periode bisa dipilih */}
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5"><Wallet size={15} className="text-peach-400" /><h2 className="font-display text-sm font-bold text-ink">Keuangan &middot; {financePeriodLabel[financePeriod]}</h2></div>
-        <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
+      <div className="mb-2">
+        <div className="mb-2 flex items-center gap-1.5"><Wallet size={15} className="text-peach-400" /><h2 className="font-display text-sm font-bold text-ink">Keuangan &middot; {financePeriodLabel[financePeriod]}</h2></div>
+        <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
           {(['today', 'week', 'month', 'year', 'custom'] as FinancePeriod[]).map((p) => (
             <button
               key={p}
               onClick={() => handlePeriodChange(p)}
               className={`flex-none rounded-full border px-3 py-1.5 text-[11px] font-bold whitespace-nowrap ${financePeriod === p ? 'border-ink bg-ink text-cream' : 'border-lilac-200 bg-white text-ink-soft'}`}
             >
-              {financePeriodLabel[p]}
+              {p === 'today' ? 'Hari Ini' : p === 'week' ? 'Minggu' : p === 'month' ? 'Bulan' : p === 'year' ? 'Tahun' : 'Kustom'}
             </button>
           ))}
         </div>
       </div>
 
       {financePeriod === 'custom' && (
-        <div className="mb-3 flex items-center gap-2">
-          <Input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
-          <span className="text-xs text-ink-soft">s/d</span>
-          <Input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
-          <button onClick={() => reloadFinance('custom', customFrom, customTo)} className="flex-none rounded-xl bg-ink px-4 py-2.5 text-xs font-bold text-cream">
+        <div className="mb-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <Input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
+            <span className="flex-none text-xs text-ink-soft">s/d</span>
+            <Input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
+          </div>
+          <button onClick={() => reloadFinance('custom', customFrom, customTo)} className="w-full rounded-xl bg-ink py-2.5 text-xs font-bold text-cream">
             Terapkan
           </button>
         </div>
