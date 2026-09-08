@@ -55,18 +55,37 @@ export function KasirClient() {
   const [checkingOut, setCheckingOut] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Cache semua produk di client supaya pencarian instan (tidak perlu hit DB tiap ketik)
+  const allProductsRef = useRef<ProductStockSummary[]>([]);
+  const allProductsLoaded = useRef(false);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
+  // Load semua produk sekali di awal
   useEffect(() => {
-    const q = query.trim();
+    if (allProductsLoaded.current) return;
+    allProductsLoaded.current = true;
+    getProductSummaries().then((all) => { allProductsRef.current = all; }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const q = query.trim().toLowerCase();
     if (q.length < 2) { setSuggestions([]); return; }
+    // Filter lokal dari cache — instan, tidak ada network call
+    const local = allProductsRef.current.filter(
+      (p) => p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q)
+    ).slice(0, 6);
+    if (local.length > 0) {
+      setSuggestions(local);
+      return;
+    }
+    // Fallback ke DB kalau cache belum terisi (pertama kali)
     const t = setTimeout(async () => {
       try {
-        const results = await getProductSummaries({ search: q });
+        const results = await getProductSummaries({ search: query.trim() });
         setSuggestions(results.slice(0, 6));
       } catch { /* ignore */ }
-    }, 200);
+    }, 300);
     return () => clearTimeout(t);
   }, [query]);
 
@@ -109,15 +128,16 @@ export function KasirClient() {
     const q = raw.trim();
     if (!q) return;
     try {
-      // 1. Coba kode internal (BR0001 dst)
+      // 1. Coba kode internal (BR0001 dst) - paling cepat
       let product = await getProductByCode(q);
 
-      // 2. Kalau tidak ketemu, coba barcode kemasan pabrik lewat fungsi DB
+      // 2. Coba barcode kemasan pabrik lewat fungsi DB
       if (!product) {
         const productId = await findProductByAnyBarcode(q);
         if (productId) {
-          const results = await getProductSummaries({ search: productId });
-          product = results.find((p) => p.product_id === productId) || null;
+          // Ambil langsung berdasarkan product_id, bukan search teks
+          const allResults = await getProductSummaries();
+          product = allResults.find((p) => p.product_id === productId) || null;
         }
       }
 
@@ -270,7 +290,7 @@ export function KasirClient() {
         <EmptyState icon={<ShoppingCart size={30} />} title="Keranjang masih kosong" hint="Scan barcode produk untuk memulai transaksi." />
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="mb-3 space-y-2">
             <Field label="Nama pembeli (opsional)">
               <Input value={buyerName} onChange={(e) => setBuyerName(e.target.value)} placeholder="Cth: Bu Lubis" />
             </Field>
@@ -279,8 +299,8 @@ export function KasirClient() {
             </Field>
           </div>
           {transactionDate !== todayISO() && (
-            <p className="-mt-3 mb-4 flex items-center gap-1.5 text-[11px] font-bold text-butter-500">
-              <CalendarClock size={13} /> Transaksi akan dicatat untuk tanggal {transactionDate}, bukan hari ini
+            <p className="-mt-2 mb-3 flex items-center gap-1.5 text-[11px] font-bold text-butter-500">
+              <CalendarClock size={13} /> Dicatat untuk tanggal {transactionDate}
             </p>
           )}
 
@@ -375,7 +395,7 @@ export function KasirClient() {
                 />
               </div>
             )}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-3">
               <Field label="Berat terjual (gram)">
                 <Input
                   type="number"

@@ -113,21 +113,19 @@ export function ProdukClient({ initialProducts }: { initialProducts: ProductStoc
 
   return (
     <div className="animate-slide-up">
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div>
-          <h1 className="font-display text-2xl font-extrabold text-ink">Daftar Barang</h1>
-          <p className="text-sm text-ink-soft">{products.length} produk terdaftar</p>
+      {!selectionMode && (
+        <div className="mb-3 flex items-center gap-2">
+          <Link href="/import">
+            <Button variant="ghost" size="sm"><UploadCloud size={15} /> Import</Button>
+          </Link>
+          <Link href="/barang-masuk" className="flex-1">
+            <Button variant="dark" size="sm" full><Plus size={15} /> Produk Baru</Button>
+          </Link>
         </div>
-        {!selectionMode && (
-          <div className="flex flex-none gap-2">
-            <Link href="/import">
-              <Button variant="ghost" size="sm"><UploadCloud size={15} /> Import CSV</Button>
-            </Link>
-            <Link href="/barang-masuk">
-              <Button variant="dark" size="sm"><Plus size={15} /> Produk Baru</Button>
-            </Link>
-          </div>
-        )}
+      )}
+      <div className="mb-4">
+        <h1 className="font-display text-2xl font-extrabold text-ink">Daftar Barang</h1>
+        <p className="text-sm text-ink-soft">{products.length} produk terdaftar</p>
       </div>
 
       {selectionMode ? (

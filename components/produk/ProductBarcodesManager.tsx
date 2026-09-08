@@ -2,8 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { ScanLine, Plus, Trash2, Loader2 } from 'lucide-react';
+import { ScanLine, Plus, Trash2, Loader2, Camera, X } from 'lucide-react';
 import { getProductBarcodes, addProductBarcode, deleteProductBarcode, type ProductBarcode } from '@/lib/actions/products';
+import { BrowserMultiFormatReader } from '@zxing/browser';
+import { NotFoundException } from '@zxing/library';
 
 export function ProductBarcodesManager({ productId }: { productId: string }) {
   const [barcodes, setBarcodes] = useState<ProductBarcode[]>([]);
@@ -12,7 +14,12 @@ export function ProductBarcodesManager({ productId }: { productId: string }) {
   const [newBarcode, setNewBarcode] = useState('');
   const [newLabel, setNewLabel] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scanError, setScanError] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const readerRef = useRef<BrowserMultiFormatReader | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
   async function refresh() {
     setLoading(true);
@@ -26,8 +33,57 @@ export function ProductBarcodesManager({ productId }: { productId: string }) {
   useEffect(() => { refresh(); }, [productId]);
 
   useEffect(() => {
-    if (showForm) setTimeout(() => inputRef.current?.focus(), 50);
-  }, [showForm]);
+    if (showForm && !scannerOpen) setTimeout(() => inputRef.current?.focus(), 50);
+  }, [showForm, scannerOpen]);
+
+  useEffect(() => {
+    return () => { stopCamera(); };
+  }, []);
+
+  async function startCamera() {
+    setScanError('');
+    setScannerOpen(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' },
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+
+      const reader = new BrowserMultiFormatReader();
+      readerRef.current = reader;
+
+      reader.decodeFromVideoElement(videoRef.current!, (result, err) => {
+        if (result) {
+          const code = result.getText();
+          stopCamera();
+          setNewBarcode(code);
+          toast.success(`Barcode terdeteksi: ${code}`);
+        }
+        // NotFoundException adalah error normal saat belum ada barcode di frame
+        if (err && !(err instanceof NotFoundException)) {
+          console.warn('scan error:', err);
+        }
+      });
+    } catch {
+      setScanError('Tidak bisa akses kamera. Pastikan izin kamera sudah diberikan di pengaturan browser.');
+      setScannerOpen(false);
+    }
+  }
+
+  function stopCamera() {
+    if (readerRef.current) {
+      readerRef.current = null;
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    setScannerOpen(false);
+  }
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
@@ -68,40 +124,77 @@ export function ProductBarcodesManager({ productId }: { productId: string }) {
       {showForm && (
         <form onSubmit={handleAdd} className="mb-3 rounded-xl bg-lilac-50 p-3">
           <p className="mb-2 text-[11px] text-ink-soft">
-            Scan atau ketik barcode yang sudah ada di kemasan produknya, lalu tambahkan.
+            Scan atau ketik barcode dari kemasan produk ini.
           </p>
-          <input
-            ref={inputRef}
-            type="text"
-            value={newBarcode}
-            onChange={(e) => setNewBarcode(e.target.value)}
-            placeholder="Scan atau ketik barcode kemasan..."
-            className="mb-2 w-full rounded-xl border border-lilac-200 bg-white px-3 py-2 font-mono text-sm text-ink outline-none focus:border-peach-400 focus:ring-2 focus:ring-peach-100"
-          />
-          <input
-            type="text"
-            value={newLabel}
-            onChange={(e) => setNewLabel(e.target.value)}
-            placeholder="Keterangan (opsional, cth: Varian 85gr)"
-            className="mb-2 w-full rounded-xl border border-lilac-200 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-peach-400 focus:ring-2 focus:ring-peach-100"
-          />
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => { setShowForm(false); setNewBarcode(''); setNewLabel(''); }}
-              className="flex-1 rounded-xl border border-lilac-200 py-2 text-xs font-bold text-ink-soft"
-            >
-              Batal
-            </button>
-            <button
-              type="submit"
-              disabled={adding}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-ink py-2 text-xs font-bold text-cream disabled:opacity-50"
-            >
-              {adding ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
-              Simpan Barcode
-            </button>
-          </div>
+
+          {scannerOpen ? (
+            <div className="mb-2">
+              <div className="relative overflow-hidden rounded-xl bg-black">
+                <video ref={videoRef} className="w-full rounded-xl" playsInline muted />
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  <div className="h-14 w-52 rounded-lg border-2 border-butter-400" />
+                </div>
+                <button
+                  type="button"
+                  onClick={stopCamera}
+                  className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <p className="mt-1.5 text-center text-[11px] text-ink-soft">Arahkan ke barcode kemasan produk</p>
+            </div>
+          ) : (
+            <div className="mb-2 flex gap-2">
+              <input
+                ref={inputRef}
+                type="text"
+                value={newBarcode}
+                onChange={(e) => setNewBarcode(e.target.value)}
+                placeholder="Ketik atau scan barcode..."
+                className="min-w-0 flex-1 rounded-xl border border-lilac-200 bg-white px-3 py-2 font-mono text-sm text-ink outline-none focus:border-peach-400 focus:ring-2 focus:ring-peach-100"
+              />
+              <button
+                type="button"
+                onClick={startCamera}
+                className="flex h-[42px] w-[42px] flex-none items-center justify-center rounded-xl bg-butter-300 text-ink"
+                title="Scan pakai kamera"
+              >
+                <Camera size={18} />
+              </button>
+            </div>
+          )}
+
+          {scanError && <p className="mb-2 text-[11px] text-rose-500">{scanError}</p>}
+
+          {!scannerOpen && (
+            <>
+              <input
+                type="text"
+                value={newLabel}
+                onChange={(e) => setNewLabel(e.target.value)}
+                placeholder="Keterangan (opsional, cth: Varian 85gr)"
+                className="mb-2 w-full rounded-xl border border-lilac-200 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-peach-400 focus:ring-2 focus:ring-peach-100"
+              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setShowForm(false); setNewBarcode(''); setNewLabel(''); stopCamera(); }}
+                  className="flex-1 rounded-xl border border-lilac-200 py-2 text-xs font-bold text-ink-soft"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={adding}
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-ink py-2 text-xs font-bold text-cream disabled:opacity-50"
+                >
+                  {adding ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
+                  Simpan Barcode
+                </button>
+              </div>
+            </>
+          )}
         </form>
       )}
 
@@ -109,7 +202,7 @@ export function ProductBarcodesManager({ productId }: { productId: string }) {
         <p className="text-[11px] text-ink-soft">Memuat...</p>
       ) : barcodes.length === 0 ? (
         <p className="text-[11px] text-ink-soft">
-          Belum ada barcode kemasan. Klik "+ Tambah" untuk menambahkan barcode yang sudah tercetak di kemasan produk ini.
+          Belum ada barcode kemasan. Klik "+ Tambah" lalu scan atau ketik barcode dari kemasan produknya.
         </p>
       ) : (
         <div className="space-y-1.5">
@@ -124,7 +217,6 @@ export function ProductBarcodesManager({ productId }: { productId: string }) {
                 type="button"
                 onClick={() => handleDelete(b)}
                 className="flex h-6 w-6 flex-none items-center justify-center rounded-lg bg-rose-100 text-rose-500 hover:bg-rose-200"
-                title="Hapus barcode ini"
               >
                 <Trash2 size={11} />
               </button>
