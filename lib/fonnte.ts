@@ -1,21 +1,33 @@
 /**
  * Kirim pesan WhatsApp lewat Fonnte (https://fonnte.com).
- * Butuh FONNTE_TOKEN & FONNTE_TARGET di environment variable.
- *
- * FONNTE_TARGET bisa diisi beberapa nomor/group ID, pisah dengan koma:
- *   6281234567890,6289876543210,1234567890-1234567890@g.us
- *
- * Catatan: untuk group WhatsApp, "countryCode" TIDAK dikirim (Fonnte
- * menolak request kalau countryCode dikirim bersamaan dengan group ID).
- * Solusinya: kirim target satu per satu, format nomor HP pakai countryCode
- * tapi group ID dikirim tanpa countryCode.
+ * Target nomor dibaca dari database (app_settings) dulu,
+ * fallback ke FONNTE_TARGET env var kalau tidak ada di DB.
  */
 export async function sendWhatsAppMessage(message: string): Promise<{ ok: boolean; error?: string }> {
   const token = process.env.FONNTE_TOKEN;
-  const targetRaw = process.env.FONNTE_TARGET;
+  if (!token) {
+    return { ok: false, error: 'FONNTE_TOKEN belum diisi di environment variable' };
+  }
 
-  if (!token || !targetRaw) {
-    return { ok: false, error: 'FONNTE_TOKEN atau FONNTE_TARGET belum diisi di environment variable' };
+  // Baca target dari database dulu (bisa diubah dari UI tanpa redeploy)
+  let targetRaw = process.env.FONNTE_TARGET || '';
+  try {
+    const { createServiceClient } = await import('@/lib/supabase/service');
+    const supabase = createServiceClient();
+    const { data } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'fonnte_target')
+      .maybeSingle();
+    if (data?.value?.trim()) {
+      targetRaw = data.value.trim();
+    }
+  } catch {
+    // Kalau DB tidak bisa diakses, tetap pakai env var
+  }
+
+  if (!targetRaw) {
+    return { ok: false, error: 'Nomor target belum diisi. Isi di halaman Pengaturan atau di FONNTE_TARGET env var.' };
   }
 
   const targets = targetRaw.split(',').map((t) => t.trim()).filter(Boolean);
@@ -26,7 +38,6 @@ export async function sendWhatsAppMessage(message: string): Promise<{ ok: boolea
       const form = new FormData();
       form.append('target', target);
       form.append('message', message);
-      // countryCode HANYA untuk nomor HP biasa (diawali angka, bukan format group @g.us)
       if (!target.includes('@')) {
         form.append('countryCode', '62');
       }

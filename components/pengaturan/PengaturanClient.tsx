@@ -197,7 +197,7 @@ export function PengaturanClient() {
           <div className="mb-3 rounded-xl bg-lilac-50 p-3 text-[11px] leading-relaxed text-ink-soft">
             Nomor target bisa diisi lebih dari satu, pisah koma. Contoh: <span className="font-mono font-bold">6281234567890,6289876543210</span><br />
             Untuk group WhatsApp, masukkan Group ID dari dashboard Fonnte (format: <span className="font-mono">xxxx@g.us</span>).<br />
-            <span className="text-butter-600 font-bold">⚠️ Setelah simpan, perlu Redeploy di Vercel supaya nomor baru aktif.</span>
+            <span className="text-mint-600 font-bold">✅ Nomor yang disimpan di sini langsung aktif — tidak perlu Redeploy.</span>
           </div>
 
           <div className="space-y-3">
@@ -226,7 +226,7 @@ export function PengaturanClient() {
               <Send size={15} /> {sending ? 'Mengirim...' : 'Kirim Sekarang'}
             </Button>
           </div>
-          <p className="mt-2 text-[11px] text-ink-soft">"Kirim Sekarang" mengirim laporan harian hari ini ke nomor yang tersimpan di Vercel (bukan yang baru diketik).</p>
+          <p className="mt-2 text-[11px] text-ink-soft">"Kirim Sekarang" mengirim laporan harian hari ini ke nomor yang tersimpan (dari form di atas setelah disimpan).</p>
         </Card>
 
         {/* ── Pengguna ── */}

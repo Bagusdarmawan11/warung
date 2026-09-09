@@ -27,9 +27,18 @@ export async function POST(req: Request) {
   const adminClient = createAdminClient(url, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
 
   try {
-    // Kirim email undangan
+    // Kirim email undangan - redirectTo harus ke domain website, bukan Supabase
+    // NEXT_PUBLIC_BASE_URL wajib diset di Vercel env var (contoh: https://warung-rho.vercel.app)
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+    if (!baseUrl) {
+      return NextResponse.json({
+        ok: false,
+        error: 'NEXT_PUBLIC_BASE_URL belum diset di Vercel environment variable. Isi dengan URL website kamu, contoh: https://warung-rho.vercel.app'
+      }, { status: 500 });
+    }
+
     const { data: invited, error: inviteErr } = await adminClient.auth.admin.inviteUserByEmail(email.trim(), {
-      redirectTo: `${process.env.NEXT_PUBLIC_BASE_URL || url}/auth/callback`,
+      redirectTo: `${baseUrl}/auth/callback`,
       data: { invited_role: role, display_name: displayName?.trim() || '' },
     });
 
