@@ -161,8 +161,16 @@ export function KasirClient() {
     }
   }
 
+  // Lock anti-spam: setelah satu barcode diproses, blok semua deteksi selama 2 detik
+  const scanLockRef = useRef(false);
+
   function handleScanDetected(code: string) {
+    if (scanLockRef.current) return;
+    scanLockRef.current = true;
+    setScannerOpen(false); // tutup scanner segera
     lookupAndAdd(code);
+    // Buka kunci setelah 2 detik supaya bisa scan lagi
+    setTimeout(() => { scanLockRef.current = false; }, 2000);
   }
 
   function confirmGramAdd() {
@@ -295,7 +303,7 @@ export function KasirClient() {
               <Input value={buyerName} onChange={(e) => setBuyerName(e.target.value)} placeholder="Cth: Bu Lubis" />
             </Field>
             <Field label="Tanggal transaksi">
-              <Input type="date" max={todayISO()} value={transactionDate} onChange={(e) => setTransactionDate(e.target.value)} />
+              <DateSelectInline value={transactionDate} onChange={setTransactionDate} />
             </Field>
           </div>
           {transactionDate !== todayISO() && (
@@ -438,6 +446,38 @@ export function KasirClient() {
       />
 
       <ImageLightbox src={lightbox} onClose={() => setLightbox(null)} />
+    </div>
+  );
+}
+
+// DateSelectInline: 3 dropdown day/month/year, tidak bergantung native date picker iOS
+const MONTHS = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+function DateSelectInline({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const today = new Date();
+  const [y, m, d] = value.split('-').map(Number);
+  const daysInMonth = new Date(y, m, 0).getDate();
+
+  function update(newY: number, newM: number, newD: number) {
+    const capped = Math.min(newD, new Date(newY, newM, 0).getDate());
+    onChange(`${newY}-${String(newM).padStart(2,'0')}-${String(capped).padStart(2,'0')}`);
+  }
+
+  const days = Array.from({length: daysInMonth}, (_, i) => i + 1);
+  const months = Array.from({length: 12}, (_, i) => i + 1);
+  const years = Array.from({length: 3}, (_, i) => today.getFullYear() - i);
+
+  const sel = "flex-1 rounded-xl border border-lilac-200 bg-white px-2 py-2.5 text-sm text-ink outline-none focus:border-peach-400";
+  return (
+    <div className="flex gap-1.5">
+      <select value={d} onChange={(e) => update(y, m, +e.target.value)} className={sel}>
+        {days.map(dd => <option key={dd} value={dd}>{dd}</option>)}
+      </select>
+      <select value={m} onChange={(e) => update(y, +e.target.value, d)} className={sel}>
+        {months.map(mm => <option key={mm} value={mm}>{MONTHS[mm-1]}</option>)}
+      </select>
+      <select value={y} onChange={(e) => update(+e.target.value, m, d)} className={sel}>
+        {years.map(yy => <option key={yy} value={yy}>{yy}</option>)}
+      </select>
     </div>
   );
 }

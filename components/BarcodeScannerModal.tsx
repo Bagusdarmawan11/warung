@@ -65,13 +65,15 @@ export function BarcodeScannerModal({
               const barcodes = await detector.detect(videoRef.current);
               if (!cancelled && barcodes.length > 0) {
                 const code = barcodes[0].rawValue;
-                const now = Date.now();
-                const last = lastCodeRef.current;
-                // Debounce: sama persis dalam 1.5 detik diabaikan
-                if (!last || last.code !== code || now - last.at > 1500) {
-                  lastCodeRef.current = { code, at: now };
-                  if (!cancelled) onDetected(code);
+                // LOCK KETAT: setelah deteksi pertama, stop scanner sepenuhnya
+                cancelled = true;
+                if (rafRef.current) cancelAnimationFrame(rafRef.current);
+                if (streamRef.current) {
+                  streamRef.current.getTracks().forEach((t) => t.stop());
+                  streamRef.current = null;
                 }
+                onDetected(code);
+                return; // jangan schedule frame berikutnya
               }
             } catch { /* frame belum siap, coba lagi */ }
             if (!cancelled) rafRef.current = requestAnimationFrame(scanNative);
