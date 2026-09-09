@@ -41,9 +41,12 @@ export function BerandaClient({
   const [financePeriod, setFinancePeriod] = useState<FinancePeriod>('month');
   const [customFrom, setCustomFrom] = useState(startOfMonthISO());
   const [customTo, setCustomTo] = useState(today);
-  const [financeSales, setFinanceSales] = useState<SaleRow[]>(sales.filter((s) => s.sold_at.slice(0, 10) >= startOfMonthISO()));
-  const [financeStockIn, setFinanceStockIn] = useState<StockInHistoryRow[]>(stockIn.filter((r) => (r.received_at || '').slice(0, 10) >= startOfMonthISO()));
-  const [financeLoading, setFinanceLoading] = useState(false);
+  const [financeSales, setFinanceSales] = useState<SaleRow[]>([]);
+  const [financeStockIn, setFinanceStockIn] = useState<StockInHistoryRow[]>([]);
+  const [financeLoading, setFinanceLoading] = useState(true);
+
+  // Load data keuangan dari server saat pertama kali mount
+  useEffect(() => { reloadFinance('month'); }, []);
 
   function rangeFor(p: FinancePeriod): { from: string; to: string } {
     if (p === 'today') return { from: today, to: today };

@@ -1,9 +1,26 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
-const PUBLIC_PATHS = ['/login', '/auth/callback', '/api/cron'];
+// Path yang tidak perlu auth - termasuk semua API internal
+const PUBLIC_PATHS = [
+  '/login',
+  '/auth/callback',
+  '/api/cron',
+  '/api/settings',
+  '/_next',
+  '/favicon',
+  '/logo',
+];
 
 export async function updateSession(request: NextRequest) {
+  const path = request.nextUrl.pathname;
+
+  // Bypass auth untuk path publik SEBELUM apapun - termasuk sebelum buat Supabase client
+  const isPublic = PUBLIC_PATHS.some((p) => path.startsWith(p));
+  if (isPublic) {
+    return NextResponse.next({ request });
+  }
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -29,10 +46,7 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const path = request.nextUrl.pathname;
-  const isPublic = PUBLIC_PATHS.some((p) => path.startsWith(p)) || path.startsWith('/_next') || path.startsWith('/api/public');
-
-  if (!user && !isPublic) {
+  if (!user) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     url.searchParams.set('redirectedFrom', path);

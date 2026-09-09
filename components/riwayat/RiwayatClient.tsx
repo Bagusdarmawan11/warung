@@ -230,15 +230,89 @@ export function RiwayatClient({ initialSales, initialStockIn, namaWarung }: {
 function StockInRow({ r, idx, onDeleted }: { r: StockInHistoryRow; idx: number; onDeleted: () => void }) {
   const [confirm, setConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [searchProd, setSearchProd] = useState('');
+  const [allProds, setAllProds] = useState<ProductStockSummary[]>([]);
+  const [selectedProd, setSelectedProd] = useState<ProductStockSummary | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const filteredProds = useMemo(() => {
+    const q = searchProd.trim().toLowerCase();
+    if (!q) return allProds.slice(0, 8);
+    return allProds.filter((p) => p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q)).slice(0, 8);
+  }, [allProds, searchProd]);
+
+  async function openEdit() {
+    setEditing(true);
+    if (allProds.length === 0) {
+      const prods = await getProductSummaries();
+      setAllProds(prods);
+    }
+  }
 
   async function handleDelete() {
     setDeleting(true);
     const res = await deleteProductBatch(r.batch_id || r.id);
     setDeleting(false);
     if (!res.ok) { toast.error(res.error); setConfirm(false); return; }
-    toast.success('Barang masuk dihapus, stok disesuaikan');
+    toast.success('Barang masuk dihapus');
     setConfirm(false);
     onDeleted();
+  }
+
+  async function handleChangeProduct() {
+    if (!selectedProd) { toast.error('Pilih produk pengganti dulu'); return; }
+    setSaving(true);
+    // Update product_id di batch dan snapshot nama
+    const supabase = (await import('@/lib/supabase/client')).createClient();
+    const { error } = await supabase
+      .from('product_batches')
+      .update({ product_id: selectedProd.product_id })
+      .eq('id', r.batch_id || r.id);
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success(`Produk diubah ke "${selectedProd.name}"`);
+    setEditing(false);
+    onDeleted(); // refresh list
+  }
+
+  if (editing) {
+    return (
+      <Card tight>
+        <p className="mb-2 text-[11px] font-bold text-ink">Ganti Produk Barang Masuk</p>
+        <p className="mb-2 text-[11px] text-ink-soft">
+          Saat ini: <span className="font-bold text-ink">{r.product_name_snapshot}</span> · {formatQty(r.qty, r.product?.unit_type || 'pcs')} · {formatTanggal(r.received_at)}
+        </p>
+        <Input
+          value={searchProd}
+          onChange={(e) => { setSearchProd(e.target.value); setSelectedProd(null); }}
+          placeholder="Cari produk pengganti..."
+          className="mb-2"
+          autoFocus
+        />
+        <div className="mb-2 max-h-40 overflow-y-auto rounded-xl border border-lilac-100">
+          {filteredProds.map((p) => (
+            <button key={p.product_id} onClick={() => setSelectedProd(p)}
+              className={`flex w-full items-center gap-2 border-b border-lilac-50 px-3 py-2 text-left last:border-0 ${selectedProd?.product_id === p.product_id ? 'bg-peach-50' : 'hover:bg-lilac-50'}`}>
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-semibold text-ink">{p.name}</p>
+                <p className="font-mono text-[10px] text-ink-soft">{p.code} · stok {formatQty(p.stok, p.unit_type)}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+        {selectedProd && (
+          <p className="mb-2 text-[11px] text-mint-600 font-bold">Dipilih: {selectedProd.name}</p>
+        )}
+        <div className="flex gap-2">
+          <button onClick={() => setEditing(false)} className="flex-1 rounded-xl border border-lilac-200 py-2 text-[11px] font-bold text-ink-soft">Batal</button>
+          <button onClick={handleChangeProduct} disabled={saving || !selectedProd}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-ink py-2 text-[11px] font-bold text-cream disabled:opacity-50">
+            <RefreshCw size={12} /> {saving ? 'Menyimpan...' : 'Ganti Produk'}
+          </button>
+        </div>
+      </Card>
+    );
   }
 
   return (
@@ -248,11 +322,12 @@ function StockInRow({ r, idx, onDeleted }: { r: StockInHistoryRow; idx: number; 
           <p className="mb-1 text-[11px] font-bold text-rose-600">Hapus barang masuk ini?</p>
           <p className="mb-2 text-[11px] text-rose-500">
             {r.product_name_snapshot} · +{formatQty(r.qty, r.product?.unit_type || 'pcs')} · {formatTanggal(r.received_at)}<br />
-            Stok produk akan berkurang sejumlah yang dihapus.
+            Stok produk akan berkurang.
           </p>
           <div className="flex gap-2">
             <button onClick={() => setConfirm(false)} className="flex-1 rounded-xl border border-rose-200 py-2 text-[11px] font-bold text-ink-soft">Batal</button>
-            <button onClick={handleDelete} disabled={deleting} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-rose-500 py-2 text-[11px] font-bold text-white disabled:opacity-50">
+            <button onClick={handleDelete} disabled={deleting}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-rose-500 py-2 text-[11px] font-bold text-white disabled:opacity-50">
               <Trash2 size={12} /> {deleting ? 'Menghapus...' : 'Ya, Hapus'}
             </button>
           </div>
@@ -268,9 +343,14 @@ function StockInRow({ r, idx, onDeleted }: { r: StockInHistoryRow; idx: number; 
             <p className="font-mono text-sm font-bold text-mint-600">+{formatQty(r.qty, r.product?.unit_type || 'pcs')}</p>
             <p className="font-mono text-[11px] text-ink-soft">modal {rupiah(r.buy_price)}</p>
           </div>
-          <button onClick={() => setConfirm(true)} className="flex h-7 w-7 flex-none items-center justify-center rounded-lg bg-rose-100 text-rose-500">
-            <Trash2 size={13} />
-          </button>
+          <div className="flex gap-1">
+            <button onClick={openEdit} className="flex h-7 w-7 items-center justify-center rounded-lg bg-lilac-100 text-lilac-500">
+              <RefreshCw size={12} />
+            </button>
+            <button onClick={() => setConfirm(true)} className="flex h-7 w-7 items-center justify-center rounded-lg bg-rose-100 text-rose-500">
+              <Trash2 size={13} />
+            </button>
+          </div>
         </div>
       )}
     </Card>
