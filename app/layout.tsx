@@ -10,6 +10,10 @@ const mono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-mono', weigh
 export const metadata: Metadata = {
   title: process.env.NEXT_PUBLIC_NAMA_WARUNG || 'Warung Kasir',
   description: 'Aplikasi kasir & manajemen stok warung',
+  icons: {
+    icon: '/favicon.png',
+    apple: '/logo-nav.png',
+  },
 };
 
 export const viewport: Viewport = {

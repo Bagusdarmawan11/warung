@@ -7,8 +7,9 @@ export function Footer() {
         <div className="pointer-events-none absolute -right-8 -top-10 h-32 w-32 rounded-full bg-white/40 blur-2xl" />
         <div className="pointer-events-none absolute -bottom-12 -left-10 h-32 w-32 rounded-full bg-white/30 blur-2xl" />
 
-        <div className="relative mx-auto mb-2.5 flex h-10 w-10 items-center justify-center rounded-2xl bg-ink text-butter-300 shadow-soft">
-          <Store size={17} />
+        <div className="relative mx-auto mb-2.5 flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-soft">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo-nav.png" alt="Warung Mama Indah" className="h-full w-full object-cover" />
         </div>
         <p className="relative font-display text-[15px] font-bold text-ink">Warung Mama Indah</p>
         <p className="relative mt-1 text-[11px] text-ink-soft">Copyright © 2026 by PT. Catindo Bagus Perkasa</p>

@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { PackagePlus, Download, Plus, Search, ImagePlus, X } from 'lucide-react';
+import { PackagePlus, Download, Plus, Search, ImagePlus, X, Camera } from 'lucide-react';
 import { Button, Card, Field, Input, Select, ToggleGroup } from '@/components/ui';
 import { BarcodeCanvas, downloadBarcodeAsPng } from '@/components/BarcodeCanvas';
 import { createProduct, addBatch } from '@/lib/actions/products';
@@ -46,6 +46,7 @@ function ProdukBaruForm() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   function handlePickImage(file: File | null) {
     setImageFile(file);
@@ -134,7 +135,7 @@ function ProdukBaruForm() {
       <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
         <div className="mb-3.5 sm:col-span-2">
           <label className="mb-1.5 block text-xs font-bold text-ink-soft">Foto Produk (opsional)</label>
-          <div className="flex items-center gap-3">
+          <div className="flex items-start gap-3">
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
@@ -147,18 +148,26 @@ function ProdukBaruForm() {
                 <ImagePlus size={22} />
               )}
             </button>
-            {imagePreview && (
-              <button type="button" onClick={() => handlePickImage(null)} className="flex items-center gap-1 text-xs font-semibold text-rose-500">
-                <X size={13} /> Hapus foto
+            <div className="flex flex-col gap-1.5 pt-1">
+              <button type="button" onClick={() => cameraInputRef.current?.click()}
+                className="flex items-center gap-1.5 rounded-lg bg-butter-100 px-3 py-1.5 text-[11px] font-bold text-ink">
+                <Camera size={13} /> Kamera
               </button>
-            )}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => handlePickImage(e.target.files?.[0] || null)}
-            />
+              <button type="button" onClick={() => fileInputRef.current?.click()}
+                className="flex items-center gap-1.5 rounded-lg bg-lilac-100 px-3 py-1.5 text-[11px] font-bold text-ink">
+                <ImagePlus size={13} /> Galeri
+              </button>
+              {imagePreview && (
+                <button type="button" onClick={() => handlePickImage(null)}
+                  className="flex items-center gap-1 text-[11px] font-semibold text-rose-500">
+                  <X size={12} /> Hapus
+                </button>
+              )}
+            </div>
+            <input ref={fileInputRef} type="file" accept="image/*" className="hidden"
+              onChange={(e) => handlePickImage(e.target.files?.[0] || null)} />
+            <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden"
+              onChange={(e) => handlePickImage(e.target.files?.[0] || null)} />
           </div>
         </div>
         <Field label="Nama Barang *" full>

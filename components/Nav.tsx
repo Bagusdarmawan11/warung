@@ -31,8 +31,9 @@ export function TopNav({ namaWarung }: { namaWarung: string }) {
         <div className="pointer-events-none absolute -top-10 left-1/4 h-20 w-1/2 rounded-full bg-white/40 blur-2xl" />
 
         <div className="relative flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-gradient-to-br from-peach-400 to-peach-500 font-display text-lg font-extrabold text-white shadow-soft">
-            {namaWarung.trim().charAt(0).toUpperCase() || 'W'}
+          <div className="flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-2xl bg-white shadow-soft">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo-nav.png" alt={namaWarung} className="h-full w-full object-cover" />
           </div>
           <div className="leading-tight">
             <p className="font-display text-[15px] font-bold text-ink">{namaWarung}</p>

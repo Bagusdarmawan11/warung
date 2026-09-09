@@ -114,11 +114,8 @@ export function ProdukClient({ initialProducts }: { initialProducts: ProductStoc
   return (
     <div className="animate-slide-up">
       {!selectionMode && (
-        <div className="mb-3 flex items-center gap-2">
-          <Link href="/import">
-            <Button variant="ghost" size="sm"><UploadCloud size={15} /> Import</Button>
-          </Link>
-          <Link href="/barang-masuk" className="flex-1">
+        <div className="mb-3">
+          <Link href="/barang-masuk" className="block">
             <Button variant="dark" size="sm" full><Plus size={15} /> Produk Baru</Button>
           </Link>
         </div>

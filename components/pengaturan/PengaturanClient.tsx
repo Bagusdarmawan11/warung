@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Users, UserPlus, Trash2, ShieldCheck, RefreshCw, Send, Clock, Phone, Settings2 } from 'lucide-react';
+import { Users, UserPlus, Trash2, ShieldCheck, RefreshCw, Send, Settings2, UploadCloud, MessageCircle } from 'lucide-react';
 import { Card, Field, Input, Select, Button, EmptyState } from '@/components/ui';
 import { ConfirmDialog } from '@/components/Modal';
 import { RoleGuard } from '@/components/RoleGuard';
 import { createClient } from '@/lib/supabase/client';
+import Link from 'next/link';
 
 interface UserRoleRow {
   id: string;
@@ -51,6 +52,11 @@ export function PengaturanClient() {
   const [newRole, setNewRole] = useState<'admin' | 'kasir'>('kasir');
   const [savingUser, setSavingUser] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<UserRoleRow | null>(null);
+  // Invite via email
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteDisplayName, setInviteDisplayName] = useState('');
+  const [inviteRole, setInviteRole] = useState<'admin' | 'kasir'>('kasir');
+  const [inviting, setInviting] = useState(false);
 
   // ── WA Report settings ──
   const [fonntTarget, setFonnteTarget] = useState('');
@@ -82,6 +88,23 @@ export function PengaturanClient() {
   }
 
   useEffect(() => { loadUsers(); loadWASettings(); }, []);
+
+  async function handleInviteByEmail() {
+    if (!inviteEmail.trim()) { toast.error('Isi email terlebih dahulu'); return; }
+    setInviting(true);
+    try {
+      const res = await fetch('/api/settings/invite-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: inviteEmail.trim(), role: inviteRole, displayName: inviteDisplayName.trim() }),
+      });
+      const data = await res.json();
+      if (!data.ok) { toast.error(data.error); return; }
+      toast.success(`Undangan berhasil dikirim ke ${inviteEmail}! Mereka akan dapat email untuk aktivasi.`);
+      setInviteEmail(''); setInviteDisplayName('');
+      loadUsers();
+    } finally { setInviting(false); }
+  }
 
   async function handleAddUser(e: React.FormEvent) {
     e.preventDefault();
@@ -168,7 +191,7 @@ export function PengaturanClient() {
         {/* ── Laporan WhatsApp ── */}
         <Card>
           <h2 className="mb-4 flex items-center gap-2 font-display text-base font-bold text-ink">
-            <Phone size={16} className="text-mint-500" /> Laporan WhatsApp Otomatis
+            <MessageCircle size={16} className="text-mint-500" /> Laporan WhatsApp Otomatis
           </h2>
 
           <div className="mb-3 rounded-xl bg-lilac-50 p-3 text-[11px] leading-relaxed text-ink-soft">
@@ -195,7 +218,7 @@ export function PengaturanClient() {
             </Field>
           </div>
 
-          <div className="mt-4 flex gap-2">
+          <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
             <Button full onClick={saveWASettings} disabled={savingWA || !waLoaded}>
               <Settings2 size={15} /> {savingWA ? 'Menyimpan...' : 'Simpan Pengaturan'}
             </Button>
@@ -248,13 +271,44 @@ export function PengaturanClient() {
         {/* ── Tambah user ── */}
         <Card>
           <h2 className="mb-3 flex items-center gap-2 font-display text-base font-bold text-ink">
-            <UserPlus size={16} className="text-lilac-400" /> Tambah Pengguna
+            <UserPlus size={16} className="text-lilac-400" /> Undang Pengguna Baru
           </h2>
-          <div className="mb-3 rounded-xl bg-lilac-50 p-3 text-[11px] leading-relaxed text-ink-soft">
-            <strong className="text-ink">Cara:</strong> Buka Supabase → Authentication → Users → Invite user → masukkan email. Setelah mereka aktivasi, copy UUID dari kolom UID dan paste di bawah.
+
+          {/* Cara 1: Undang via email (otomatis) */}
+          <div className="mb-4">
+            <p className="mb-2 text-[11px] font-bold text-ink">Undang via Email (Direkomendasikan)</p>
+            <p className="mb-3 text-[11px] text-ink-soft">Sistem akan mengirim email undangan. Setelah mereka klik link dan buat password, akses langsung aktif.</p>
+            <div className="space-y-2">
+              <Field label="Email yang akan diundang *">
+                <Input type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="contoh@gmail.com" />
+              </Field>
+              <Field label="Nama tampilan">
+                <Input value={inviteDisplayName} onChange={(e) => setInviteDisplayName(e.target.value)} placeholder="Cth: Ibu, Kak Sari" />
+              </Field>
+              <Field label="Role">
+                <Select value={inviteRole} onChange={(e) => setInviteRole(e.target.value as any)}>
+                  <option value="kasir">Kasir — input penjualan saja</option>
+                  <option value="admin">Admin — kelola produk, stok, riwayat</option>
+                </Select>
+              </Field>
+              <Button full onClick={handleInviteByEmail} disabled={inviting}>
+                <Send size={15} /> {inviting ? 'Mengirim undangan...' : 'Kirim Undangan Email'}
+              </Button>
+            </div>
           </div>
-          <form onSubmit={handleAddUser} className="space-y-3">
-            <Field label="User ID (UUID dari Supabase) *">
+
+          <div className="my-3 flex items-center gap-3">
+            <div className="flex-1 border-t border-lilac-100" />
+            <span className="text-[11px] text-ink-soft">atau manual (kalau email tidak tersedia)</span>
+            <div className="flex-1 border-t border-lilac-100" />
+          </div>
+
+          {/* Cara 2: Manual via UUID */}
+          <div className="mb-1 rounded-xl bg-lilac-50 p-3 text-[11px] text-ink-soft">
+            Buka Supabase → Authentication → Users → copy UUID dari kolom UID → paste di bawah.
+          </div>
+          <form onSubmit={handleAddUser} className="space-y-2 mt-2">
+            <Field label="User ID (UUID dari Supabase)">
               <Input value={userId} onChange={(e) => setUserId(e.target.value)} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" className="font-mono text-sm" />
             </Field>
             <Field label="Nama tampilan">
@@ -267,9 +321,22 @@ export function PengaturanClient() {
               </Select>
             </Field>
             <Button type="submit" full disabled={savingUser}>
-              <ShieldCheck size={16} /> {savingUser ? 'Menyimpan...' : 'Tambahkan Pengguna'}
+              <ShieldCheck size={16} /> {savingUser ? 'Menyimpan...' : 'Tambahkan via UUID'}
             </Button>
           </form>
+        </Card>
+
+        {/* ── Import CSV ── */}
+        <Card>
+          <h2 className="mb-3 flex items-center gap-2 font-display text-base font-bold text-ink">
+            <UploadCloud size={16} className="text-lilac-400" /> Import Data (CSV)
+          </h2>
+          <p className="mb-3 text-[11px] text-ink-soft">Import data produk & transaksi lama dari file CSV. Hanya owner yang bisa mengakses fitur ini.</p>
+          <Link href="/import">
+            <Button full variant="ghost">
+              <UploadCloud size={15} /> Buka Halaman Import CSV
+            </Button>
+          </Link>
         </Card>
 
         {/* Role legend */}

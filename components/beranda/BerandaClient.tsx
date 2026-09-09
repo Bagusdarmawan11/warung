@@ -96,6 +96,8 @@ export function BerandaClient({
   const [detailProduct, setDetailProduct] = useState<string | null>(null);
   // Modal detail: top pelanggan
   const [detailBuyer, setDetailBuyer] = useState<string | null>(null);
+  // Modal detail keuangan
+  const [financeModal, setFinanceModal] = useState<'pemasukan' | 'pengeluaran' | 'profit' | null>(null);
 
   const trend = useMemo(() => aggregateByPeriod(sales, period).map((t) => ({ label: t.label, omzet: t.omzet })), [sales, period]);
   const best = useMemo(() => bestSellers(sales, 8, bestSortBy), [sales, bestSortBy]);
@@ -188,18 +190,24 @@ export function BerandaClient({
       )}
 
       <div className={`mb-5 grid grid-cols-3 gap-2.5 transition-opacity ${financeLoading ? 'opacity-50' : ''}`}>
-        <Card tight className="!bg-mint-50 !border-mint-100">
-          <div className="mb-1 flex items-center gap-1 text-mint-600"><ArrowDownCircle size={13} /><p className="text-[10px] font-bold uppercase">Pemasukan</p></div>
-          <p className="font-mono text-sm font-bold text-ink sm:text-base">{rupiah(pemasukan)}</p>
-        </Card>
-        <Card tight className="!bg-peach-50 !border-peach-100">
-          <div className="mb-1 flex items-center gap-1 text-peach-500"><ArrowUpCircle size={13} /><p className="text-[10px] font-bold uppercase">Pengeluaran</p></div>
-          <p className="font-mono text-sm font-bold text-ink sm:text-base">{rupiah(pengeluaran)}</p>
-        </Card>
-        <Card tight className="!bg-lilac-50 !border-lilac-100">
-          <div className="mb-1 flex items-center gap-1 text-lilac-500"><TrendingUp size={13} /><p className="text-[10px] font-bold uppercase">Profit</p></div>
-          <p className={`font-mono text-sm font-bold sm:text-base ${profit >= 0 ? 'text-ink' : 'text-rose-500'}`}>{rupiah(profit)}</p>
-        </Card>
+        <button onClick={() => setFinanceModal('pemasukan')} className="block text-left">
+          <Card tight className="!bg-mint-50 !border-mint-100 transition hover:shadow-md active:scale-[0.98]">
+            <div className="mb-1 flex items-center gap-1 text-mint-600"><ArrowDownCircle size={13} /><p className="text-[10px] font-bold uppercase">Pemasukan</p></div>
+            <p className="font-mono text-sm font-bold text-ink sm:text-base">{rupiah(pemasukan)}</p>
+          </Card>
+        </button>
+        <button onClick={() => setFinanceModal('pengeluaran')} className="block text-left">
+          <Card tight className="!bg-peach-50 !border-peach-100 transition hover:shadow-md active:scale-[0.98]">
+            <div className="mb-1 flex items-center gap-1 text-peach-500"><ArrowUpCircle size={13} /><p className="text-[10px] font-bold uppercase">Pengeluaran</p></div>
+            <p className="font-mono text-sm font-bold text-ink sm:text-base">{rupiah(pengeluaran)}</p>
+          </Card>
+        </button>
+        <button onClick={() => setFinanceModal('profit')} className="block text-left">
+          <Card tight className="!bg-lilac-50 !border-lilac-100 transition hover:shadow-md active:scale-[0.98]">
+            <div className="mb-1 flex items-center gap-1 text-lilac-500"><TrendingUp size={13} /><p className="text-[10px] font-bold uppercase">Profit</p></div>
+            <p className={`font-mono text-sm font-bold sm:text-base ${profit >= 0 ? 'text-ink' : 'text-rose-500'}`}>{rupiah(profit)}</p>
+          </Card>
+        </button>
       </div>
       <p className="mb-6 -mt-3 text-[10px] text-ink-soft/70">Profit dihitung dari untung riil tiap barang yang terjual (harga jual − harga modal), bukan sekadar pemasukan dikurangi pengeluaran — karena stok yang baru dibeli belum tentu langsung laku semua di periode yang sama.</p>
 
@@ -337,6 +345,15 @@ export function BerandaClient({
         onClose={() => setDetailBuyer(null)}
       />
 
+      {/* Modal: detail keuangan */}
+      <FinanceDetailModal
+        type={financeModal}
+        sales={financeSales}
+        stockIn={financeStockIn}
+        label={financePeriodLabel[financePeriod]}
+        onClose={() => setFinanceModal(null)}
+      />
+
       {/* Restock prediction */}
       <h2 className="mb-3 flex items-center gap-1.5 font-display text-base font-bold text-ink"><PackageSearch size={17} className="text-sky-500" /> Prediksi Kebutuhan Restock</h2>
       {restock.length === 0 ? (
@@ -396,6 +413,79 @@ export function BerandaClient({
         viewAllHref={`/produk?status=expired&days=${expiryDays}`}
       />
     </div>
+  );
+}
+
+function FinanceDetailModal({ type, sales, stockIn, label, onClose }: {
+  type: 'pemasukan' | 'pengeluaran' | 'profit' | null;
+  sales: SaleRow[];
+  stockIn: StockInHistoryRow[];
+  label: string;
+  onClose: () => void;
+}) {
+  if (!type) return null;
+  const title = type === 'pemasukan' ? 'Detail Pemasukan' : type === 'pengeluaran' ? 'Detail Pengeluaran' : 'Detail Profit';
+
+  return (
+    <Modal open={!!type} onClose={onClose} title={`${title} · ${label}`}>
+      {type === 'pemasukan' && (
+        <>
+          <p className="mb-3 text-[11px] text-ink-soft">Semua transaksi penjualan di periode ini.</p>
+          {sales.length === 0 ? <p className="py-4 text-center text-sm text-ink-soft">Tidak ada transaksi.</p> : (
+            <div className="max-h-[55vh] space-y-2 overflow-y-auto">
+              {sales.slice().sort((a, b) => b.sold_at.localeCompare(a.sold_at)).map((s) => (
+                <div key={s.id} className="flex items-center gap-3 rounded-xl border border-lilac-100 px-3 py-2.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold leading-snug text-ink">{s.product_name_snapshot}</p>
+                    <p className="text-[11px] text-ink-soft">{formatTanggal(s.sold_at.slice(0,10))} · {s.buyer_name || '-'}</p>
+                  </div>
+                  <p className="flex-none font-mono text-sm font-bold text-mint-600">{rupiah(s.total)}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+      {type === 'pengeluaran' && (
+        <>
+          <p className="mb-3 text-[11px] text-ink-soft">Semua barang masuk (pembelian stok) di periode ini.</p>
+          {stockIn.length === 0 ? <p className="py-4 text-center text-sm text-ink-soft">Tidak ada pembelian stok.</p> : (
+            <div className="max-h-[55vh] space-y-2 overflow-y-auto">
+              {stockIn.slice().sort((a, b) => (b.received_at || '').localeCompare(a.received_at || '')).map((r) => (
+                <div key={r.id} className="flex items-center gap-3 rounded-xl border border-lilac-100 px-3 py-2.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold leading-snug text-ink">{r.product_name_snapshot}</p>
+                    <p className="text-[11px] text-ink-soft">{formatTanggal((r.received_at || '').slice(0,10))} · {formatQty(r.qty, r.product?.unit_type || 'pcs')}</p>
+                  </div>
+                  <p className="flex-none font-mono text-sm font-bold text-peach-500">{rupiah(r.qty * (r.buy_price || 0))}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+      {type === 'profit' && (
+        <>
+          <p className="mb-3 text-[11px] text-ink-soft">Keuntungan riil per transaksi penjualan di periode ini.</p>
+          {sales.length === 0 ? <p className="py-4 text-center text-sm text-ink-soft">Tidak ada transaksi.</p> : (
+            <div className="max-h-[55vh] space-y-2 overflow-y-auto">
+              {sales.slice().sort((a, b) => b.sold_at.localeCompare(a.sold_at)).map((s) => {
+                const p = (s.unit_price - s.unit_cost) * s.qty;
+                return (
+                  <div key={s.id} className="flex items-center gap-3 rounded-xl border border-lilac-100 px-3 py-2.5">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold leading-snug text-ink">{s.product_name_snapshot}</p>
+                      <p className="text-[11px] text-ink-soft">{formatTanggal(s.sold_at.slice(0,10))} · omzet {rupiah(s.total)}</p>
+                    </div>
+                    <p className={`flex-none font-mono text-sm font-bold ${p >= 0 ? 'text-mint-600' : 'text-rose-500'}`}>{rupiah(p)}</p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+    </Modal>
   );
 }
 

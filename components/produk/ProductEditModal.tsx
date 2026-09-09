@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Save, PlusCircle, MinusCircle, Layers, ImagePlus, Trash2 } from 'lucide-react';
+import { Save, PlusCircle, MinusCircle, Layers, ImagePlus, Trash2, Camera } from 'lucide-react';
 import { Modal, ConfirmDialog } from '@/components/Modal';
 import { Button, Field, Input, Badge, Select } from '@/components/ui';
 import { getBatchesForProduct, updateProduct, updateBatchPrice, adjustStock, deleteProduct } from '@/lib/actions/products';
@@ -34,6 +34,7 @@ export function ProductEditModal({
   const [confirmUnitChange, setConfirmUnitChange] = useState(false);
   const pendingFormData = useRef<FormData | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!product) return;
@@ -117,7 +118,7 @@ export function ProductEditModal({
 
   return (
     <Modal open={!!product} onClose={onClose} title="Edit Produk">
-      <div className="mb-4 flex items-center gap-3">
+      <div className="mb-4 flex items-start gap-3">
         <button
           onClick={() => fileInputRef.current?.click()}
           className="relative flex h-16 w-16 flex-none items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-lilac-200 bg-lilac-50/50 text-ink-soft"
@@ -131,7 +132,18 @@ export function ProductEditModal({
           {uploadingImage && <div className="absolute inset-0 flex items-center justify-center bg-white/70 text-[9px] font-bold">...</div>}
         </button>
         <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleImagePick(e.target.files?.[0] || null)} />
-        <div className="min-w-0">
+        <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handleImagePick(e.target.files?.[0] || null)} />
+        <div className="min-w-0 flex-1">
+          <div className="mb-1 flex gap-1.5">
+            <button type="button" onClick={() => cameraInputRef.current?.click()}
+              className="flex items-center gap-1 rounded-lg bg-butter-100 px-2 py-1 text-[10px] font-bold text-ink">
+              <Camera size={11} /> Kamera
+            </button>
+            <button type="button" onClick={() => fileInputRef.current?.click()}
+              className="flex items-center gap-1 rounded-lg bg-lilac-100 px-2 py-1 text-[10px] font-bold text-ink">
+              <ImagePlus size={11} /> Galeri
+            </button>
+          </div>
           <p className="font-mono text-xs text-ink-soft">{product.code} &middot; ketuk foto untuk ganti</p>
           <p className="truncate font-display text-base font-bold text-ink">{product.name}</p>
         </div>
