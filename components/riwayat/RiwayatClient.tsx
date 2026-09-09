@@ -6,7 +6,7 @@ import { Search, Download, History, FileText, ChevronLeft, ChevronRight, Users, 
 import { Card, Input, ToggleGroup, EmptyState, Field, Button } from '@/components/ui';
 import { Modal, ConfirmDialog } from '@/components/Modal';
 import { getSalesHistory, getStockInHistory, getProductStockById, updateSaleTransaction, deleteSaleTransaction, renameBuyerForGroup, changeSaleProduct } from '@/lib/actions/sales';
-import { getProductSummaries } from '@/lib/actions/products';
+import { getProductSummaries, deleteProductBatch } from '@/lib/actions/products';
 import { downloadCsv } from '@/lib/csv';
 import { exportSalesToPdf } from '@/lib/pdf';
 import { rupiah, formatTanggal, formatTanggalWaktu, formatQty, pricePerKgFromPerGram, pricePerGramFromPerKg, combineDateWithNowTime } from '@/lib/format';
@@ -183,17 +183,15 @@ export function RiwayatClient({ initialSales, initialStockIn, namaWarung }: {
         filteredStockIn.length === 0 ? <EmptyState icon={<History size={26} />} title="Tidak ada barang masuk" /> : (
           <div className="space-y-2">
             {pagedStockIn.map((r, idx) => (
-              <Card key={r.id} tight className="flex items-center gap-3">
-                <span className="w-6 flex-none text-center font-mono text-[11px] text-ink-soft">{(pageSafe - 1) * PAGE_SIZE + idx + 1}</span>
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold leading-snug text-ink">{r.product_name_snapshot}</p>
-                  <p className="text-[11px] text-ink-soft">{formatTanggal(r.received_at)}</p>
-                </div>
-                <div className="flex-none text-right">
-                  <p className="font-mono text-sm font-bold text-mint-600">+{formatQty(r.qty, r.product?.unit_type || 'pcs')}</p>
-                  <p className="font-mono text-[11px] text-ink-soft">modal {rupiah(r.buy_price)}</p>
-                </div>
-              </Card>
+              <StockInRow
+                key={r.id}
+                r={r}
+                idx={(pageSafe - 1) * PAGE_SIZE + idx}
+                onDeleted={async () => {
+                  const fresh = await getStockInHistory({ from, to, search });
+                  setStockIn(fresh);
+                }}
+              />
             ))}
           </div>
         )
@@ -226,6 +224,56 @@ export function RiwayatClient({ initialSales, initialStockIn, namaWarung }: {
         onDeleted={() => { setDetailSale(null); reloadSales(); }}
       />
     </div>
+  );
+}
+
+function StockInRow({ r, idx, onDeleted }: { r: StockInHistoryRow; idx: number; onDeleted: () => void }) {
+  const [confirm, setConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleDelete() {
+    setDeleting(true);
+    const res = await deleteProductBatch(r.batch_id || r.id);
+    setDeleting(false);
+    if (!res.ok) { toast.error(res.error); setConfirm(false); return; }
+    toast.success('Barang masuk dihapus, stok disesuaikan');
+    setConfirm(false);
+    onDeleted();
+  }
+
+  return (
+    <Card tight>
+      {confirm ? (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 p-3">
+          <p className="mb-1 text-[11px] font-bold text-rose-600">Hapus barang masuk ini?</p>
+          <p className="mb-2 text-[11px] text-rose-500">
+            {r.product_name_snapshot} · +{formatQty(r.qty, r.product?.unit_type || 'pcs')} · {formatTanggal(r.received_at)}<br />
+            Stok produk akan berkurang sejumlah yang dihapus.
+          </p>
+          <div className="flex gap-2">
+            <button onClick={() => setConfirm(false)} className="flex-1 rounded-xl border border-rose-200 py-2 text-[11px] font-bold text-ink-soft">Batal</button>
+            <button onClick={handleDelete} disabled={deleting} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-rose-500 py-2 text-[11px] font-bold text-white disabled:opacity-50">
+              <Trash2 size={12} /> {deleting ? 'Menghapus...' : 'Ya, Hapus'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-center gap-3">
+          <span className="w-6 flex-none text-center font-mono text-[11px] text-ink-soft">{idx + 1}</span>
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold leading-snug text-ink">{r.product_name_snapshot}</p>
+            <p className="text-[11px] text-ink-soft">{formatTanggal(r.received_at)}</p>
+          </div>
+          <div className="flex-none text-right">
+            <p className="font-mono text-sm font-bold text-mint-600">+{formatQty(r.qty, r.product?.unit_type || 'pcs')}</p>
+            <p className="font-mono text-[11px] text-ink-soft">modal {rupiah(r.buy_price)}</p>
+          </div>
+          <button onClick={() => setConfirm(true)} className="flex h-7 w-7 flex-none items-center justify-center rounded-lg bg-rose-100 text-rose-500">
+            <Trash2 size={13} />
+          </button>
+        </div>
+      )}
+    </Card>
   );
 }
 

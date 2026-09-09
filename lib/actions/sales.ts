@@ -5,11 +5,11 @@ import { revalidatePath } from 'next/cache';
 import type { SaleRow, StockInHistoryRow } from '@/lib/types';
 
 function revalidateAll() {
-  revalidatePath('/');
+  revalidatePath('/', 'layout');
   revalidatePath('/produk');
   revalidatePath('/kasir');
   revalidatePath('/riwayat');
-  revalidatePath('/analitik');
+  revalidatePath('/barang-masuk');
 }
 
 export interface CheckoutItem {

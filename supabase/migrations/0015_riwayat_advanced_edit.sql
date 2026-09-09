@@ -119,3 +119,30 @@ $$ language plpgsql security definer;
 
 revoke execute on function change_sale_product(uuid, uuid, numeric, boolean) from public;
 grant execute on function change_sale_product(uuid, uuid, numeric, boolean) to authenticated;
+
+-- 4. HAPUS BATCH: hapus satu batch barang masuk
+--    Stok yang tersisa di batch itu otomatis terhapus dari perhitungan
+--    CATATAN: tidak bisa hapus batch kalau sudah ada penjualan yang mereferensikan batch itu
+create or replace function delete_product_batch(p_batch_id uuid)
+returns void as $$
+declare
+  v_batch product_batches;
+  v_sales_count int;
+begin
+  select * into v_batch from product_batches where id = p_batch_id;
+  if v_batch is null then
+    raise exception 'BATCH_NOT_FOUND: batch tidak ditemukan';
+  end if;
+
+  -- Cek apakah ada transaksi yang mereferensikan batch ini
+  select count(*) into v_sales_count from sales where batch_id = p_batch_id;
+  if v_sales_count > 0 then
+    raise exception 'BATCH_HAS_SALES: batch ini sudah punya % transaksi penjualan dan tidak bisa dihapus. Hapus transaksinya dulu dari halaman Riwayat.', v_sales_count;
+  end if;
+
+  delete from product_batches where id = p_batch_id;
+end;
+$$ language plpgsql security definer;
+
+revoke execute on function delete_product_batch(uuid) from public;
+grant execute on function delete_product_batch(uuid) to authenticated;

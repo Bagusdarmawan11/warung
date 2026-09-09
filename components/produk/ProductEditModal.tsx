@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { Save, PlusCircle, MinusCircle, Layers, ImagePlus, Trash2, Camera } from 'lucide-react';
 import { Modal, ConfirmDialog } from '@/components/Modal';
 import { Button, Field, Input, Badge, Select } from '@/components/ui';
-import { getBatchesForProduct, updateProduct, updateBatchPrice, adjustStock, deleteProduct } from '@/lib/actions/products';
+import { getBatchesForProduct, updateProduct, updateBatchPrice, adjustStock, deleteProduct, deleteProductBatch } from '@/lib/actions/products';
 import { ProductBarcodesManager } from '@/components/produk/ProductBarcodesManager';
 import { uploadProductImage } from '@/lib/uploadImage';
 import { rupiah, formatTanggal, formatQty, pricePerKgFromPerGram, pricePerGramFromPerKg } from '@/lib/format';
@@ -90,6 +90,27 @@ export function ProductEditModal({
     const res = await updateBatchPrice(batch.id, buy, sell, expiry || null);
     if (!res.ok) { toast.error(res.error); return; }
     toast.success('Harga batch diperbarui');
+    const fresh = await getBatchesForProduct(product!.product_id);
+    setBatches(fresh);
+    onSaved();
+  }
+
+  async function handleDeleteBatch(batchId: string, withSales: boolean) {
+    if (withSales) {
+      // Hapus semua transaksi di batch ini dulu, lalu hapus batch
+      const { createClient } = await import('@/lib/supabase/client');
+      const supabase = createClient();
+      // Kembalikan stok dari semua sales batch ini
+      const { data: sales } = await supabase.from('sales').select('id').eq('batch_id', batchId);
+      if (sales) {
+        for (const s of sales) {
+          await import('@/lib/actions/sales').then(m => m.deleteSaleTransaction(s.id));
+        }
+      }
+    }
+    const res = await deleteProductBatch(batchId);
+    if (!res.ok) { toast.error(res.error); return; }
+    toast.success(withSales ? 'Batch dan semua transaksinya dihapus' : 'Batch dihapus');
     const fresh = await getBatchesForProduct(product!.product_id);
     setBatches(fresh);
     onSaved();
@@ -195,7 +216,7 @@ export function ProductEditModal({
         ) : (
           <div className="space-y-2">
             {batches.map((b) => (
-              <BatchRow key={b.id} batch={b} unitType={product.unit_type} onSave={handleBatchPriceSave} />
+              <BatchRow key={b.id} batch={b} unitType={product.unit_type} onSave={handleBatchPriceSave} onDelete={handleDeleteBatch} />
             ))}
           </div>
         )}
@@ -231,16 +252,19 @@ function BatchRow({
   batch,
   unitType,
   onSave,
+  onDelete,
 }: {
   batch: ProductBatch;
   unitType: 'pcs' | 'gram';
   onSave: (batch: ProductBatch, buy: number, sell: number, expiry: string) => void;
+  onDelete: (batchId: string, withSales: boolean) => void;
 }) {
   const isGram = unitType === 'gram';
   const [buy, setBuy] = useState(String(isGram ? pricePerKgFromPerGram(batch.buy_price) : batch.buy_price));
   const [sell, setSell] = useState(String(isGram ? pricePerKgFromPerGram(batch.sell_price) : batch.sell_price));
   const [expiry, setExpiry] = useState(batch.expiry_date || '');
   const [editing, setEditing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   function handleSave() {
     const buyVal = parseFloat(buy) || 0;
@@ -251,16 +275,53 @@ function BatchRow({
 
   return (
     <div className="rounded-xl border border-lilac-100 p-3 text-sm">
-      <div className="mb-1.5 flex items-center justify-between">
+      <div className="mb-1.5 flex items-center justify-between gap-2">
         <span className="font-mono text-[11px] text-ink-soft">{formatTanggal(batch.received_at)}</span>
-        <Badge tone={batch.status === 'active' ? 'good' : 'neutral'}>
-          {batch.status === 'active' ? `Sisa ${formatQty(batch.qty_remaining, unitType)}` : 'Habis'}
-        </Badge>
+        <div className="flex items-center gap-1.5">
+          <Badge tone={batch.status === 'active' ? 'good' : 'neutral'}>
+            {batch.status === 'active' ? `Sisa ${formatQty(batch.qty_remaining, unitType)}` : 'Habis'}
+          </Badge>
+          <button
+            onClick={() => setConfirmDelete(true)}
+            className="flex h-5 w-5 items-center justify-center rounded bg-rose-100 text-rose-500 hover:bg-rose-200"
+            title="Hapus batch ini"
+          >
+            <Trash2 size={11} />
+          </button>
+        </div>
       </div>
-      {editing ? (
+
+      {confirmDelete ? (
+        <div className="mt-2 rounded-xl border border-rose-200 bg-rose-50 p-3">
+          <p className="mb-2 text-[11px] font-bold text-rose-600">Hapus batch ini?</p>
+          <p className="mb-3 text-[11px] text-rose-500">
+            Qty masuk: {formatQty(batch.qty_initial, unitType)} &middot; Sisa: {formatQty(batch.qty_remaining, unitType)}
+          </p>
+          <div className="space-y-1.5">
+            <button
+              onClick={() => { setConfirmDelete(false); onDelete(batch.id, false); }}
+              className="w-full rounded-lg border border-rose-300 bg-white px-3 py-2 text-[11px] font-bold text-rose-600"
+            >
+              Hapus batch saja (transaksi penjualan tetap ada di Riwayat)
+            </button>
+            <button
+              onClick={() => { setConfirmDelete(false); onDelete(batch.id, true); }}
+              className="w-full rounded-lg bg-rose-500 px-3 py-2 text-[11px] font-bold text-white"
+            >
+              Hapus batch + semua transaksi penjualannya (stok dikembalikan)
+            </button>
+            <button
+              onClick={() => setConfirmDelete(false)}
+              className="w-full py-1.5 text-[11px] text-ink-soft"
+            >
+              Batal
+            </button>
+          </div>
+        </div>
+      ) : editing ? (
         <div className="grid grid-cols-2 gap-2">
-          <Input type="number" value={buy} onChange={(e) => setBuy(e.target.value)} placeholder={isGram ? 'Harga modal /kg' : 'Harga modal'} />
-          <Input type="number" value={sell} onChange={(e) => setSell(e.target.value)} placeholder={isGram ? 'Harga jual /kg' : 'Harga jual'} />
+          <Input type="number" value={buy} onChange={(e) => setBuy(e.target.value)} placeholder={isGram ? 'Modal /kg' : 'Modal'} />
+          <Input type="number" value={sell} onChange={(e) => setSell(e.target.value)} placeholder={isGram ? 'Jual /kg' : 'Jual'} />
           <Input type="date" value={expiry} onChange={(e) => setExpiry(e.target.value)} className="col-span-2" />
           <Button size="sm" className="col-span-2" onClick={handleSave}>
             Simpan Harga Batch

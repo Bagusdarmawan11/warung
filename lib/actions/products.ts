@@ -5,12 +5,11 @@ import { revalidatePath } from 'next/cache';
 import type { Product, ProductBatch, ProductStockSummary, UnitType } from '@/lib/types';
 
 function revalidateAll() {
-  revalidatePath('/');
+  revalidatePath('/', 'layout');
   revalidatePath('/produk');
   revalidatePath('/kasir');
   revalidatePath('/barang-masuk');
   revalidatePath('/riwayat');
-  revalidatePath('/analitik');
 }
 
 export type ActionResult<T = undefined> = { ok: true; data: T } | { ok: false; error: string };
@@ -365,4 +364,18 @@ export async function findProductByAnyBarcode(barcode: string): Promise<string |
   const { data, error } = await supabase.rpc('find_product_by_any_barcode', { p_barcode: barcode });
   if (error || !data) return null;
   return data as string;
+}
+
+/** Hapus satu batch barang masuk. Tidak bisa dihapus kalau sudah ada transaksi penjualan. */
+export async function deleteProductBatch(batchId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc('delete_product_batch', { p_batch_id: batchId });
+  if (error) {
+    if (error.message.includes('BATCH_HAS_SALES')) {
+      return { ok: false, error: error.message.replace('BATCH_HAS_SALES: ', '') };
+    }
+    return { ok: false, error: error.message };
+  }
+  revalidateAll();
+  return { ok: true, data: undefined };
 }
