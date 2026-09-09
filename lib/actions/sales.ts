@@ -113,3 +113,53 @@ export async function updateSaleTransaction(input: UpdateSaleInput): Promise<{ o
   if (error) return { ok: false, error: error.message };
   return { ok: true, data: data as SaleRow };
 }
+
+/** Hapus satu transaksi penjualan. Stok otomatis dikembalikan ke batch aslinya. */
+export async function deleteSaleTransaction(saleId: string): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc('delete_sale_transaction', { p_sale_id: saleId });
+  if (error) return { ok: false, error: error.message };
+  revalidateAll();
+  return { ok: true };
+}
+
+/** Ubah nama pembeli untuk SEMUA transaksi dalam satu grup (pembeli + tanggal yang sama). */
+export async function renameBuyerForGroup(
+  oldBuyerName: string,
+  dateKey: string,
+  newBuyerName: string
+): Promise<{ ok: boolean; count?: number; error?: string }> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc('rename_buyer_for_group', {
+    p_old_buyer_name: oldBuyerName,
+    p_date_key: dateKey,
+    p_new_buyer_name: newBuyerName,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidateAll();
+  return { ok: true, count: data as number };
+}
+
+/** Ganti produk di transaksi ke produk lain. Stok produk lama dikembalikan,
+ * stok produk baru dipotong via FIFO. */
+export async function changeSaleProduct(
+  saleId: string,
+  newProductId: string,
+  allowOversell = false
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc('change_sale_product', {
+    p_sale_id: saleId,
+    p_new_product_id: newProductId,
+    p_new_unit_price: null,
+    p_allow_oversell: allowOversell,
+  });
+  if (error) {
+    if (error.message.includes('INSUFFICIENT_STOCK')) {
+      return { ok: false, error: 'Stok produk tujuan tidak cukup. Pastikan produknya masih ada stok.' };
+    }
+    return { ok: false, error: error.message };
+  }
+  revalidateAll();
+  return { ok: true };
+}

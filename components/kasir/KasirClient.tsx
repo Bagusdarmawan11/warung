@@ -304,7 +304,7 @@ export function KasirClient() {
             </p>
           )}
 
-          <div className="mb-4 space-y-2">
+          <div className="mb-40 space-y-2">
             {cart.map((item) => (
               <div key={item.product_id} className="rounded-2xl border border-lilac-100 bg-white p-3 shadow-soft">
                 <div className="flex items-start gap-2.5">

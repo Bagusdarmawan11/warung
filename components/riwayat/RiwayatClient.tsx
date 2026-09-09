@@ -2,14 +2,15 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Search, Download, History, FileText, ChevronLeft, ChevronRight, User, Clock, TrendingUp, Package, Edit2, Save, Users, Receipt } from 'lucide-react';
-import { Card, Input, ToggleGroup, EmptyState, Badge, Field, Button } from '@/components/ui';
-import { Modal } from '@/components/Modal';
-import { getSalesHistory, getStockInHistory, getProductStockById, updateSaleTransaction } from '@/lib/actions/sales';
+import { Search, Download, History, FileText, ChevronLeft, ChevronRight, Users, Receipt, Edit2, Save, Trash2, RefreshCw, X, Package } from 'lucide-react';
+import { Card, Input, ToggleGroup, EmptyState, Field, Button } from '@/components/ui';
+import { Modal, ConfirmDialog } from '@/components/Modal';
+import { getSalesHistory, getStockInHistory, getProductStockById, updateSaleTransaction, deleteSaleTransaction, renameBuyerForGroup, changeSaleProduct } from '@/lib/actions/sales';
+import { getProductSummaries } from '@/lib/actions/products';
 import { downloadCsv } from '@/lib/csv';
 import { exportSalesToPdf } from '@/lib/pdf';
 import { rupiah, formatTanggal, formatTanggalWaktu, formatQty, pricePerKgFromPerGram, pricePerGramFromPerKg, combineDateWithNowTime } from '@/lib/format';
-import type { SaleRow, StockInHistoryRow } from '@/lib/types';
+import type { SaleRow, StockInHistoryRow, ProductStockSummary } from '@/lib/types';
 
 const PAGE_SIZE = 20;
 
@@ -42,11 +43,7 @@ function groupSalesByBuyerDay(sales: SaleRow[]): BuyerDayGroup[] {
   return [...map.values()].sort((a, b) => b.latestSoldAt.localeCompare(a.latestSoldAt));
 }
 
-export function RiwayatClient({
-  initialSales,
-  initialStockIn,
-  namaWarung,
-}: {
+export function RiwayatClient({ initialSales, initialStockIn, namaWarung }: {
   initialSales: SaleRow[];
   initialStockIn: StockInHistoryRow[];
   namaWarung: string;
@@ -62,33 +59,25 @@ export function RiwayatClient({
   const [openGroup, setOpenGroup] = useState<BuyerDayGroup | null>(null);
   const [detailSale, setDetailSale] = useState<SaleRow | null>(null);
 
-  async function reloadSales() {
-    const fresh = await getSalesHistory({ from, to, search });
+  async function reloadSales(fromVal = from, toVal = to, searchVal = search) {
+    const fresh = await getSalesHistory({ from: fromVal, to: toVal, search: searchVal });
     setSales(fresh);
-    // refresh grup yang sedang dibuka & sale yang sedang dilihat, kalau ada
     if (openGroup) {
-      const stillThere = fresh.filter((s) => (s.buyer_name?.trim() || 'Tanpa Nama Pembeli') + '__' + s.sold_at.slice(0, 10) === openGroup.key);
-      if (stillThere.length) {
-        setOpenGroup({ ...openGroup, items: stillThere });
-      } else {
-        setOpenGroup(null);
-      }
+      const stillThere = fresh.filter((s) =>
+        (s.buyer_name?.trim() || 'Tanpa Nama Pembeli') + '__' + s.sold_at.slice(0, 10) === openGroup.key
+      );
+      setOpenGroup(stillThere.length ? { ...openGroup, items: stillThere } : null);
     }
-    if (detailSale) {
-      const updated = fresh.find((s) => s.id === detailSale.id);
-      setDetailSale(updated || null);
-    }
+    if (detailSale) setDetailSale(fresh.find((s) => s.id === detailSale.id) || null);
   }
 
   async function applyFilter() {
     setLoading(true);
     try {
-      if (sub === 'keluar') setSales(await getSalesHistory({ from, to, search }));
+      if (sub === 'keluar') await reloadSales();
       else setStockIn(await getStockInHistory({ from, to, search }));
       setPage(1);
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }
 
   useEffect(() => { setPage(1); }, [sub, search]);
@@ -106,27 +95,12 @@ export function RiwayatClient({
   }, [stockIn, search]);
 
   const groups = useMemo(() => groupSalesByBuyerDay(filteredSales), [filteredSales]);
-
-  const totalQty = sub === 'keluar' ? filteredSales.reduce((s, r) => s + r.qty, 0) : filteredStockIn.reduce((s, r) => s + r.qty, 0);
-  const totalNilai =
-    sub === 'keluar'
-      ? filteredSales.reduce((s, r) => s + r.total, 0)
-      : filteredStockIn.reduce((s, r) => s + r.qty * (r.buy_price || 0), 0);
-
+  const totalOmzet = filteredSales.reduce((s, r) => s + r.total, 0);
+  const totalNilaiMasuk = filteredStockIn.reduce((s, r) => s + r.qty * (r.buy_price || 0), 0);
   const totalPages = Math.max(1, Math.ceil((sub === 'keluar' ? groups.length : filteredStockIn.length) / PAGE_SIZE));
   const pageSafe = Math.min(page, totalPages);
   const pagedGroups = groups.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE);
   const pagedStockIn = filteredStockIn.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE);
-
-  function exportCsv() {
-    const rows: (string | number)[][] = [['Tanggal', 'Produk', 'Qty', 'Harga Modal', 'Harga Jual']];
-    filteredStockIn.forEach((r) => rows.push([formatTanggal(r.received_at), r.product_name_snapshot, r.qty, r.buy_price || 0, r.sell_price || 0]));
-    downloadCsv('riwayat-barang-masuk.csv', rows);
-  }
-
-  function exportPdf() {
-    exportSalesToPdf(filteredSales, { from, to, namaWarung });
-  }
 
   return (
     <div className="animate-slide-up">
@@ -153,11 +127,16 @@ export function RiwayatClient({
             {loading ? 'Memuat...' : 'Terapkan'}
           </button>
           {sub === 'keluar' ? (
-            <button onClick={exportPdf} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-peach-200 bg-peach-50 py-2.5 text-xs font-bold text-peach-600">
+            <button onClick={() => exportSalesToPdf(filteredSales, { from, to, namaWarung })}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-peach-200 bg-peach-50 py-2.5 text-xs font-bold text-peach-600">
               <FileText size={14} /> Unduh PDF
             </button>
           ) : (
-            <button onClick={exportCsv} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-lilac-200 bg-lilac-50 py-2.5 text-xs font-bold text-ink-soft">
+            <button onClick={() => {
+              const rows: (string | number)[][] = [['Tanggal', 'Produk', 'Qty', 'Harga Modal', 'Harga Jual']];
+              filteredStockIn.forEach((r) => rows.push([formatTanggal(r.received_at), r.product_name_snapshot, r.qty, r.buy_price || 0, r.sell_price || 0]));
+              downloadCsv('riwayat-barang-masuk.csv', rows);
+            }} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-lilac-200 bg-lilac-50 py-2.5 text-xs font-bold text-ink-soft">
               <Download size={14} /> Unduh CSV
             </button>
           )}
@@ -165,16 +144,20 @@ export function RiwayatClient({
       </Card>
 
       <div className="mb-4 grid grid-cols-2 gap-3">
-        <Card tight><p className="text-[11px] font-bold uppercase text-ink-soft">Total Qty</p><p className="font-mono text-lg font-bold text-ink">{totalQty.toLocaleString('id-ID')}</p></Card>
-        <Card tight><p className="text-[11px] font-bold uppercase text-ink-soft">{sub === 'keluar' ? 'Total Omzet' : 'Total Nilai Modal'}</p><p className="font-mono text-lg font-bold text-peach-500">{rupiah(totalNilai)}</p></Card>
+        <Card tight>
+          <p className="text-[11px] font-bold uppercase text-ink-soft">{sub === 'keluar' ? 'Transaksi' : 'Item Masuk'}</p>
+          <p className="font-mono text-lg font-bold text-ink">{sub === 'keluar' ? groups.length : filteredStockIn.length}</p>
+        </Card>
+        <Card tight>
+          <p className="text-[11px] font-bold uppercase text-ink-soft">{sub === 'keluar' ? 'Total Omzet' : 'Nilai Modal'}</p>
+          <p className="font-mono text-lg font-bold text-peach-500">{rupiah(sub === 'keluar' ? totalOmzet : totalNilaiMasuk)}</p>
+        </Card>
       </div>
 
       {sub === 'keluar' ? (
-        groups.length === 0 ? (
-          <EmptyState icon={<History size={26} />} title="Tidak ada catatan penjualan" />
-        ) : (
+        groups.length === 0 ? <EmptyState icon={<History size={26} />} title="Tidak ada penjualan" /> : (
           <>
-            <p className="mb-2 text-[11px] font-semibold text-ink-soft">Tekan nama pembeli untuk lihat semua belanjaannya di hari itu.</p>
+            <p className="mb-2 text-[11px] font-semibold text-ink-soft">Ketuk untuk lihat detail. Edit/hapus dari popup detail produknya.</p>
             <div className="space-y-2">
               {pagedGroups.map((g) => (
                 <button key={g.key} onClick={() => setOpenGroup(g)} className="block w-full text-left">
@@ -196,33 +179,35 @@ export function RiwayatClient({
             </div>
           </>
         )
-      ) : filteredStockIn.length === 0 ? (
-        <EmptyState icon={<History size={26} />} title="Tidak ada catatan barang masuk" />
       ) : (
-        <div className="space-y-2">
-          {pagedStockIn.map((r, idx) => (
-            <Card key={r.id} tight className="flex items-center gap-3">
-              <span className="w-6 flex-none text-center font-mono text-[11px] text-ink-soft">{(pageSafe - 1) * PAGE_SIZE + idx + 1}</span>
-              <div className="min-w-0 flex-1">
-                <p className="font-semibold leading-snug text-ink">{r.product_name_snapshot}</p>
-                <p className="text-[11px] text-ink-soft">{formatTanggal(r.received_at)}</p>
-              </div>
-              <div className="flex-none text-right">
-                <p className="font-mono text-sm font-bold text-mint-600">+{formatQty(r.qty, r.product?.unit_type || 'pcs')}</p>
-                <p className="font-mono text-[11px] text-ink-soft">modal {rupiah(r.buy_price)}</p>
-              </div>
-            </Card>
-          ))}
-        </div>
+        filteredStockIn.length === 0 ? <EmptyState icon={<History size={26} />} title="Tidak ada barang masuk" /> : (
+          <div className="space-y-2">
+            {pagedStockIn.map((r, idx) => (
+              <Card key={r.id} tight className="flex items-center gap-3">
+                <span className="w-6 flex-none text-center font-mono text-[11px] text-ink-soft">{(pageSafe - 1) * PAGE_SIZE + idx + 1}</span>
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold leading-snug text-ink">{r.product_name_snapshot}</p>
+                  <p className="text-[11px] text-ink-soft">{formatTanggal(r.received_at)}</p>
+                </div>
+                <div className="flex-none text-right">
+                  <p className="font-mono text-sm font-bold text-mint-600">+{formatQty(r.qty, r.product?.unit_type || 'pcs')}</p>
+                  <p className="font-mono text-[11px] text-ink-soft">modal {rupiah(r.buy_price)}</p>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )
       )}
 
       {totalPages > 1 && (
         <div className="mt-5 flex items-center justify-center gap-3">
-          <button disabled={pageSafe <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="flex h-9 w-9 items-center justify-center rounded-full border border-lilac-200 bg-white text-ink disabled:opacity-30">
+          <button disabled={pageSafe <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-lilac-200 bg-white text-ink disabled:opacity-30">
             <ChevronLeft size={16} />
           </button>
           <span className="text-xs font-bold text-ink-soft">Halaman {pageSafe} dari {totalPages}</span>
-          <button disabled={pageSafe >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} className="flex h-9 w-9 items-center justify-center rounded-full border border-lilac-200 bg-white text-ink disabled:opacity-30">
+          <button disabled={pageSafe >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-lilac-200 bg-white text-ink disabled:opacity-30">
             <ChevronRight size={16} />
           </button>
         </div>
@@ -232,92 +217,179 @@ export function RiwayatClient({
         group={openGroup}
         onClose={() => setOpenGroup(null)}
         onSelectItem={(s) => setDetailSale(s)}
+        onGroupRenamed={reloadSales}
       />
-
       <SaleDetailModal
         sale={detailSale}
         onClose={() => setDetailSale(null)}
         onUpdated={reloadSales}
+        onDeleted={() => { setDetailSale(null); reloadSales(); }}
       />
     </div>
   );
 }
 
-function BuyerDayModal({ group, onClose, onSelectItem }: { group: BuyerDayGroup | null; onClose: () => void; onSelectItem: (s: SaleRow) => void }) {
+function BuyerDayModal({ group, onClose, onSelectItem, onGroupRenamed }: {
+  group: BuyerDayGroup | null;
+  onClose: () => void;
+  onSelectItem: (s: SaleRow) => void;
+  onGroupRenamed: () => void;
+}) {
+  const [editingName, setEditingName] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (group) { setEditingName(false); setNewName(group.buyerName === 'Tanpa Nama Pembeli' ? '' : group.buyerName); }
+  }, [group]);
+
   if (!group) return null;
+
+  async function handleRename() {
+    if (!newName.trim()) { toast.error('Nama tidak boleh kosong'); return; }
+    setSaving(true);
+    const oldName = group!.buyerName === 'Tanpa Nama Pembeli' ? '' : group!.buyerName;
+    const res = await renameBuyerForGroup(oldName, group!.dateKey, newName.trim());
+    setSaving(false);
+    if (!res.ok) { toast.error(res.error); return; }
+    toast.success(`${res.count} transaksi berhasil diganti namanya`);
+    setEditingName(false);
+    onGroupRenamed();
+    onClose();
+  }
+
   return (
     <Modal open={!!group} onClose={onClose} title={group.buyerName}>
-      <p className="mb-4 text-xs text-ink-soft">{formatTanggal(group.dateKey)} &middot; {group.items.length} produk dibeli &middot; total <span className="font-bold text-ink">{rupiah(group.totalOmzet)}</span></p>
+      {editingName ? (
+        <div className="mb-4">
+          <p className="mb-2 text-[11px] text-ink-soft">Nama baru akan diterapkan ke semua {group.items.length} transaksi orang ini pada tanggal {formatTanggal(group.dateKey)}.</p>
+          <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Nama pembeli baru..." autoFocus />
+          <div className="mt-2 flex gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setEditingName(false)} disabled={saving}>Batal</Button>
+            <Button size="sm" onClick={handleRename} disabled={saving} full>
+              <Save size={14} /> {saving ? 'Menyimpan...' : 'Simpan Nama'}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="mb-4 flex items-start justify-between gap-2">
+          <p className="text-xs text-ink-soft">{formatTanggal(group.dateKey)} &middot; {group.items.length} produk &middot; total <span className="font-bold text-ink">{rupiah(group.totalOmzet)}</span></p>
+          <button onClick={() => setEditingName(true)}
+            className="flex flex-none items-center gap-1 rounded-lg bg-lilac-100 px-2.5 py-1 text-[11px] font-bold text-ink">
+            <Edit2 size={12} /> Edit Nama
+          </button>
+        </div>
+      )}
+
       <div className="space-y-2">
-        {group.items
-          .slice()
-          .sort((a, b) => b.sold_at.localeCompare(a.sold_at))
-          .map((s) => (
-            <button key={s.id} onClick={() => onSelectItem(s)} className="block w-full text-left">
-              <Card tight className="flex items-center gap-3 transition hover:border-peach-200">
-                <Receipt size={16} className="flex-none text-lilac-300" />
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold leading-snug text-ink">{s.product_name_snapshot}</p>
-                  <p className="text-[11px] text-ink-soft">{formatQty(s.qty, s.product?.unit_type || 'pcs')} &middot; {formatTanggalWaktu(s.sold_at).split(' ').slice(-1)[0]}</p>
-                </div>
-                <div className="flex-none font-mono text-sm font-bold text-ink">{rupiah(s.total)}</div>
-              </Card>
-            </button>
-          ))}
+        {group.items.slice().sort((a, b) => b.sold_at.localeCompare(a.sold_at)).map((s) => (
+          <button key={s.id} onClick={() => onSelectItem(s)} className="block w-full text-left">
+            <Card tight className="flex items-center gap-3 transition hover:border-peach-200">
+              <Receipt size={16} className="flex-none text-lilac-300" />
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold leading-snug text-ink">{s.product_name_snapshot}</p>
+                <p className="text-[11px] text-ink-soft">{formatQty(s.qty, s.product?.unit_type || 'pcs')} &middot; {formatTanggalWaktu(s.sold_at).split(' ').slice(-1)[0]}</p>
+              </div>
+              <div className="flex-none font-mono text-sm font-bold text-ink">{rupiah(s.total)}</div>
+            </Card>
+          </button>
+        ))}
       </div>
     </Modal>
   );
 }
 
-function SaleDetailModal({ sale, onClose, onUpdated }: { sale: SaleRow | null; onClose: () => void; onUpdated: () => void }) {
+function SaleDetailModal({ sale, onClose, onUpdated, onDeleted }: {
+  sale: SaleRow | null;
+  onClose: () => void;
+  onUpdated: () => void;
+  onDeleted: () => void;
+}) {
   const [stok, setStok] = useState<number | null>(null);
-  const [editing, setEditing] = useState(false);
+  const [mode, setMode] = useState<'view' | 'edit' | 'changeProduct' | 'confirmDelete'>('view');
 
   useEffect(() => {
-    setEditing(false);
+    setMode('view');
     if (!sale) { setStok(null); return; }
     getProductStockById(sale.product_id).then(setStok).catch(() => setStok(null));
   }, [sale]);
 
   if (!sale) return null;
-
   const isGram = sale.product?.unit_type === 'gram';
   const profit = (sale.unit_price - sale.unit_cost) * sale.qty;
-  const durasi = sale.batch?.received_at
-    ? Math.round((new Date(sale.sold_at).getTime() - new Date(sale.batch.received_at).getTime()) / 86400000)
-    : null;
 
-  if (editing) {
-    return <SaleEditForm sale={sale} onCancel={() => setEditing(false)} onSaved={() => { setEditing(false); onUpdated(); }} />;
-  }
+  if (mode === 'edit') return <SaleEditForm sale={sale} onCancel={() => setMode('view')} onSaved={() => { setMode('view'); onUpdated(); }} />;
+  if (mode === 'changeProduct') return <SaleChangeProductModal sale={sale} onCancel={() => setMode('view')} onSaved={() => { setMode('view'); onUpdated(); }} />;
 
   return (
     <Modal open={!!sale} onClose={onClose} title="Detail Transaksi">
+      {mode === 'confirmDelete' && (
+        <div className="mb-4 rounded-xl border-2 border-rose-200 bg-rose-50 p-3">
+          <p className="mb-2 text-sm font-bold text-rose-600">Hapus transaksi ini?</p>
+          <p className="mb-3 text-[11px] text-rose-500">Stok {sale.product_name_snapshot} akan dikembalikan sebanyak {formatQty(sale.qty, sale.product?.unit_type || 'pcs')}.</p>
+          <div className="flex gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setMode('view')}>Batal</Button>
+            <button onClick={async () => {
+              const res = await deleteSaleTransaction(sale.id);
+              if (!res.ok) { toast.error(res.error); return; }
+              toast.success('Transaksi dihapus, stok dikembalikan');
+              onDeleted();
+            }} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-rose-500 py-2.5 text-xs font-bold text-white">
+              <Trash2 size={14} /> Ya, Hapus
+            </button>
+          </div>
+        </div>
+      )}
+
       <p className="mb-1 font-display text-lg font-bold text-ink">{sale.product_name_snapshot}</p>
       <p className="mb-4 text-xs text-ink-soft">{formatTanggalWaktu(sale.sold_at)}</p>
 
       <div className="mb-4 grid grid-cols-2 gap-2.5">
-        <DetailStat label="Qty Terjual" value={formatQty(sale.qty, sale.product?.unit_type || 'pcs')} />
-        <DetailStat label="Harga Satuan" value={rupiah(isGram ? pricePerKgFromPerGram(sale.unit_price) : sale.unit_price) + (isGram ? '/kg' : '')} />
-        <DetailStat label="Total" value={rupiah(sale.total)} highlight />
-        <DetailStat label="Keuntungan" value={rupiah(profit)} good />
+        <div className="rounded-xl border border-lilac-100 p-3">
+          <p className="text-[10px] font-bold uppercase text-ink-soft">Qty Terjual</p>
+          <p className="font-mono text-base font-bold text-ink">{formatQty(sale.qty, sale.product?.unit_type || 'pcs')}</p>
+        </div>
+        <div className="rounded-xl border border-lilac-100 p-3">
+          <p className="text-[10px] font-bold uppercase text-ink-soft">Harga Satuan</p>
+          <p className="font-mono text-base font-bold text-ink">{rupiah(isGram ? pricePerKgFromPerGram(sale.unit_price) : sale.unit_price)}{isGram ? '/kg' : ''}</p>
+        </div>
+        <div className="rounded-xl border border-lilac-100 p-3">
+          <p className="text-[10px] font-bold uppercase text-ink-soft">Total</p>
+          <p className="font-mono text-base font-bold text-peach-500">{rupiah(sale.total)}</p>
+        </div>
+        <div className="rounded-xl border border-lilac-100 p-3">
+          <p className="text-[10px] font-bold uppercase text-ink-soft">Keuntungan</p>
+          <p className="font-mono text-base font-bold text-mint-600">{rupiah(profit)}</p>
+        </div>
       </div>
 
-      <div className="mb-4 space-y-2.5 rounded-2xl bg-lilac-50 p-3.5">
-        <InfoLine icon={<User size={14} />} label="Pembeli" value={sale.buyer_name || 'Tidak dicatat'} />
-        {durasi !== null && (
-          <InfoLine icon={<Clock size={14} />} label="Lama di stok sebelum terjual" value={durasi <= 0 ? 'Hari yang sama' : `${durasi} hari`} />
-        )}
-        <InfoLine icon={<TrendingUp size={14} />} label="Harga Modal Saat Itu" value={rupiah(isGram ? pricePerKgFromPerGram(sale.unit_cost) : sale.unit_cost) + (isGram ? '/kg' : '')} />
-        <InfoLine icon={<Package size={14} />} label="Sisa Stok Produk Ini Sekarang" value={stok === null ? 'Memuat...' : formatQty(stok, sale.product?.unit_type || 'pcs')} />
+      <div className="mb-4 space-y-2 rounded-2xl bg-lilac-50 p-3.5 text-sm">
+        <div className="flex items-center gap-2.5">
+          <span className="text-ink-soft">👤</span>
+          <span className="flex-1 text-ink-soft">Pembeli</span>
+          <span className="font-semibold text-ink">{sale.buyer_name || 'Tidak dicatat'}</span>
+        </div>
+        <div className="flex items-center gap-2.5">
+          <Package size={14} className="text-ink-soft" />
+          <span className="flex-1 text-ink-soft">Sisa Stok Sekarang</span>
+          <span className="font-semibold text-ink">{stok === null ? 'Memuat...' : formatQty(stok, sale.product?.unit_type || 'pcs')}</span>
+        </div>
       </div>
 
-      <button
-        onClick={() => setEditing(true)}
-        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-ink py-3 text-sm font-bold text-cream shadow-soft active:scale-[0.98]"
-      >
-        <Edit2 size={15} /> Edit Transaksi Ini
-      </button>
+      <div className="grid grid-cols-2 gap-2">
+        <button onClick={() => setMode('edit')}
+          className="flex items-center justify-center gap-2 rounded-2xl border border-lilac-200 py-3 text-sm font-bold text-ink active:scale-[0.98]">
+          <Edit2 size={15} /> Edit Transaksi
+        </button>
+        <button onClick={() => setMode('changeProduct')}
+          className="flex items-center justify-center gap-2 rounded-2xl border border-lilac-200 py-3 text-sm font-bold text-ink active:scale-[0.98]">
+          <RefreshCw size={15} /> Ganti Produk
+        </button>
+        <button onClick={() => setMode('confirmDelete')}
+          className="col-span-2 flex items-center justify-center gap-2 rounded-2xl border border-rose-200 bg-rose-50 py-3 text-sm font-bold text-rose-500 active:scale-[0.98]">
+          <Trash2 size={15} /> Hapus Transaksi Ini
+        </button>
+      </div>
     </Modal>
   );
 }
@@ -332,16 +404,12 @@ function SaleEditForm({ sale, onCancel, onSaved }: { sale: SaleRow; onCancel: ()
 
   async function handleSave() {
     const qtyNum = parseFloat(qty);
-    const priceNum = parseFloat(priceDisplay);
     if (!qtyNum || qtyNum <= 0) { toast.error('Qty harus lebih dari 0'); return; }
-    if (isNaN(priceNum) || priceNum < 0) { toast.error('Harga tidak valid'); return; }
-    if (!dateStr) { toast.error('Tanggal wajib diisi'); return; }
-
     setSaving(true);
     const res = await updateSaleTransaction({
       saleId: sale.id,
       qty: qtyNum,
-      unitPrice: isGram ? pricePerGramFromPerKg(priceNum) : priceNum,
+      unitPrice: isGram ? pricePerGramFromPerKg(parseFloat(priceDisplay)) : parseFloat(priceDisplay),
       buyerName,
       soldAt: combineDateWithNowTime(dateStr),
     });
@@ -353,13 +421,11 @@ function SaleEditForm({ sale, onCancel, onSaved }: { sale: SaleRow; onCancel: ()
 
   return (
     <Modal open onClose={onCancel} title="Edit Transaksi">
-      <p className="mb-4 font-display text-base font-bold text-ink">{sale.product_name_snapshot}</p>
-
-      <div className="mb-2 rounded-xl bg-butter-50 p-3 text-[11px] leading-relaxed text-ink-soft">
-        Kalau qty diubah, stok produk otomatis disesuaikan (ditambah/dikurangi sesuai selisihnya) dari batch yang sama dengan transaksi aslinya.
+      <p className="mb-3 font-display text-base font-bold text-ink">{sale.product_name_snapshot}</p>
+      <div className="mb-3 rounded-xl bg-butter-50 p-3 text-[11px] text-ink-soft">
+        Kalau qty diubah, stok produk otomatis disesuaikan dari batch yang sama.
       </div>
-
-      <div className="grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2">
+      <div className="space-y-3">
         <Field label="Tanggal Transaksi">
           <Input type="date" value={dateStr} onChange={(e) => setDateStr(e.target.value)} />
         </Field>
@@ -373,31 +439,81 @@ function SaleEditForm({ sale, onCancel, onSaved }: { sale: SaleRow; onCancel: ()
           <Input type="number" step="any" min={0} value={priceDisplay} onChange={(e) => setPriceDisplay(e.target.value)} />
         </Field>
       </div>
-
       <div className="mt-4 flex gap-2">
         <Button variant="ghost" full onClick={onCancel} disabled={saving}>Batal</Button>
         <Button full onClick={handleSave} disabled={saving}>
-          <Save size={16} /> {saving ? 'Menyimpan...' : 'Simpan Perubahan'}
+          <Save size={16} /> {saving ? 'Menyimpan...' : 'Simpan'}
         </Button>
       </div>
     </Modal>
   );
 }
 
-function DetailStat({ label, value, highlight, good }: { label: string; value: string; highlight?: boolean; good?: boolean }) {
+function SaleChangeProductModal({ sale, onCancel, onSaved }: { sale: SaleRow; onCancel: () => void; onSaved: () => void }) {
+  const [search, setSearch] = useState('');
+  const [allProducts, setAllProducts] = useState<ProductStockSummary[]>([]);
+  const [selected, setSelected] = useState<ProductStockSummary | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    getProductSummaries().then(setAllProducts).catch(() => {});
+  }, []);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return allProducts.slice(0, 10);
+    return allProducts.filter((p) => p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q)).slice(0, 10);
+  }, [allProducts, search]);
+
+  async function handleSave() {
+    if (!selected) { toast.error('Pilih produk pengganti dulu'); return; }
+    setSaving(true);
+    const res = await changeSaleProduct(sale.id, selected.product_id);
+    setSaving(false);
+    if (!res.ok) { toast.error(res.error); return; }
+    toast.success('Produk berhasil diganti');
+    onSaved();
+  }
+
   return (
-    <div className="rounded-xl border border-lilac-100 p-3">
-      <p className="text-[10px] font-bold uppercase text-ink-soft">{label}</p>
-      <p className={`font-mono text-base font-bold ${good ? 'text-mint-600' : highlight ? 'text-peach-500' : 'text-ink'}`}>{value}</p>
-    </div>
-  );
-}
-function InfoLine({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
-  return (
-    <div className="flex items-center gap-2.5 text-sm">
-      <span className="text-ink-soft">{icon}</span>
-      <span className="flex-1 text-ink-soft">{label}</span>
-      <span className="font-semibold text-ink">{value}</span>
-    </div>
+    <Modal open onClose={onCancel} title="Ganti Produk">
+      <p className="mb-3 text-[11px] text-ink-soft">
+        Transaksi <span className="font-bold text-ink">{sale.product_name_snapshot}</span> ({formatQty(sale.qty, sale.product?.unit_type || 'pcs')}) akan dipindahkan ke produk lain.
+        Stok produk lama dikembalikan, stok produk baru dipotong.
+      </p>
+      <Input
+        value={search}
+        onChange={(e) => { setSearch(e.target.value); setSelected(null); }}
+        placeholder="Cari produk pengganti..."
+        className="mb-2"
+        autoFocus
+      />
+      <div className="mb-3 max-h-52 overflow-y-auto rounded-xl border border-lilac-100">
+        {filtered.map((p) => (
+          <button
+            key={p.product_id}
+            onClick={() => setSelected(p)}
+            className={`flex w-full items-center gap-2.5 border-b border-lilac-50 px-3 py-2.5 text-left last:border-0 ${selected?.product_id === p.product_id ? 'bg-peach-50' : 'hover:bg-lilac-50'}`}
+          >
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold leading-snug text-ink">{p.name}</p>
+              <p className="font-mono text-[11px] text-ink-soft">{p.code} &middot; stok {formatQty(p.stok, p.unit_type)}</p>
+            </div>
+            {selected?.product_id === p.product_id && <X size={14} className="flex-none text-peach-500" />}
+          </button>
+        ))}
+      </div>
+      {selected && (
+        <div className="mb-3 rounded-xl bg-peach-50 p-3 text-[11px]">
+          <span className="font-bold text-ink">Dipilih:</span> {selected.name} &middot; stok {formatQty(selected.stok, selected.unit_type)}
+        </div>
+      )}
+      <div className="flex gap-2">
+        <Button variant="ghost" full onClick={onCancel} disabled={saving}>Batal</Button>
+        <Button full onClick={handleSave} disabled={saving || !selected}>
+          <RefreshCw size={15} /> {saving ? 'Mengganti...' : 'Ganti Produk'}
+        </Button>
+      </div>
+    </Modal>
   );
 }
