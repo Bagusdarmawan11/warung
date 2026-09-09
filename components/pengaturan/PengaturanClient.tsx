@@ -29,19 +29,6 @@ const ROLE_COLOR: Record<string, string> = {
   kasir: 'bg-mint-100 text-mint-700',
 };
 
-// Jam-jam UTC yang valid untuk cron (dalam WIB = UTC+7)
-// Vercel Hobby: hanya 1x/hari, jadwal dalam UTC
-const SCHEDULE_OPTIONS = [
-  { label: '00:00 WIB (17:00 UTC)', utcHour: 17 },
-  { label: '06:00 WIB (23:00 UTC)', utcHour: 23 },
-  { label: '07:00 WIB (00:00 UTC)', utcHour: 0 },
-  { label: '08:00 WIB (01:00 UTC)', utcHour: 1 },
-  { label: '12:00 WIB (05:00 UTC)', utcHour: 5 },
-  { label: '18:00 WIB (11:00 UTC)', utcHour: 11 },
-  { label: '21:00 WIB (14:00 UTC)', utcHour: 14 },
-  { label: '22:00 WIB (15:00 UTC)', utcHour: 15 },
-  { label: '23:00 WIB (16:00 UTC)', utcHour: 16 },
-];
 
 export function PengaturanClient() {
   // ── User management ──
@@ -60,7 +47,7 @@ export function PengaturanClient() {
 
   // ── WA Report settings ──
   const [fonntTarget, setFonnteTarget] = useState('');
-  const [scheduleHour, setScheduleHour] = useState(17); // default 17 UTC = 00:00 WIB
+  const [scheduleWib, setScheduleWib] = useState('00:00');
   const [savingWA, setSavingWA] = useState(false);
   const [sending, setSending] = useState(false);
   const [waLoaded, setWaLoaded] = useState(false);
@@ -76,13 +63,12 @@ export function PengaturanClient() {
   }
 
   async function loadWASettings() {
-    // Simpan setting WA di tabel app_settings (key-value sederhana)
-    const { data } = await supabase.from('app_settings').select('key,value').in('key', ['fonnte_target', 'report_schedule_utc_hour']);
+    const { data } = await supabase.from('app_settings').select('key,value').in('key', ['fonnte_target', 'report_schedule_wib']);
     if (data) {
       const t = data.find((r: any) => r.key === 'fonnte_target');
-      const s = data.find((r: any) => r.key === 'report_schedule_utc_hour');
+      const s = data.find((r: any) => r.key === 'report_schedule_wib');
       if (t) setFonnteTarget(t.value);
-      if (s) setScheduleHour(Number(s.value));
+      if (s) setScheduleWib(s.value || '00:00');
     }
     setWaLoaded(true);
   }
@@ -145,25 +131,18 @@ export function PengaturanClient() {
 
   async function saveWASettings() {
     if (!fonntTarget.trim()) { toast.error('Isi nomor target terlebih dahulu'); return; }
+    // Validasi format jam HH:MM
+    if (!/^\d{1,2}:\d{2}$/.test(scheduleWib)) { toast.error('Format jam harus HH:MM, contoh: 00:30 atau 07:00'); return; }
+    const [h, m] = scheduleWib.split(':').map(Number);
+    if (h < 0 || h > 23 || m < 0 || m > 59) { toast.error('Jam tidak valid (00:00–23:59)'); return; }
+
     setSavingWA(true);
     try {
-      // Upsert ke app_settings
       await supabase.from('app_settings').upsert([
         { key: 'fonnte_target', value: fonntTarget.trim() },
-        { key: 'report_schedule_utc_hour', value: String(scheduleHour) },
+        { key: 'report_schedule_wib', value: scheduleWib },
       ], { onConflict: 'key' });
-      // Update vercel.json jadwal via API internal
-      const res = await fetch('/api/settings/wa', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fonnte_target: fonntTarget.trim(), schedule_utc_hour: scheduleHour }),
-      });
-      if (!res.ok) {
-        const d = await res.json().catch(() => null);
-        toast.error('Tersimpan di DB, tapi jadwal Vercel perlu update manual: ' + (d?.error || 'unknown'));
-      } else {
-        toast.success('Pengaturan WA disimpan! Nomor target baru akan aktif setelah redeploy.');
-      }
+      toast.success(`Pengaturan disimpan! Laporan akan dikirim tiap hari jam ${scheduleWib} WIB.`);
     } finally { setSavingWA(false); }
   }
 
@@ -209,12 +188,14 @@ export function PengaturanClient() {
                 disabled={!waLoaded}
               />
             </Field>
-            <Field label="Jadwal Pengiriman Laporan Harian">
-              <Select value={String(scheduleHour)} onChange={(e) => setScheduleHour(Number(e.target.value))}>
-                {SCHEDULE_OPTIONS.map((o) => (
-                  <option key={o.utcHour} value={o.utcHour}>{o.label}</option>
-                ))}
-              </Select>
+            <Field label="Jam Pengiriman Laporan Harian (WIB)" hint="Format 24 jam: HH:MM — contoh 00:30 untuk jam 12:30 malam, 07:00 untuk jam 7 pagi">
+              <Input
+                value={scheduleWib}
+                onChange={(e) => setScheduleWib(e.target.value)}
+                placeholder="00:00"
+                maxLength={5}
+                disabled={!waLoaded}
+              />
             </Field>
           </div>
 
@@ -226,7 +207,10 @@ export function PengaturanClient() {
               <Send size={15} /> {sending ? 'Mengirim...' : 'Kirim Sekarang'}
             </Button>
           </div>
-          <p className="mt-2 text-[11px] text-ink-soft">"Kirim Sekarang" mengirim laporan harian hari ini ke nomor yang tersimpan (dari form di atas setelah disimpan).</p>
+          <p className="mt-2 text-[11px] text-ink-soft">
+            Laporan otomatis dikirim tiap hari tepat di jam yang kamu set. Perubahan jam langsung aktif tanpa perlu redeploy.
+            "Kirim Sekarang" selalu mengirim laporan hari ini segera.
+          </p>
         </Card>
 
         {/* ── Pengguna ── */}

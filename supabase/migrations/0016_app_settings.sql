@@ -21,3 +21,8 @@ insert into app_settings (key, value) values
   ('fonnte_target', ''),
   ('report_schedule_utc_hour', '17')
 on conflict (key) do nothing;
+
+-- Tambah key jadwal WIB bebas (format HH:MM)
+insert into app_settings (key, value) values
+  ('report_schedule_wib', '00:00')
+on conflict (key) do nothing;
