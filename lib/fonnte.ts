@@ -9,21 +9,23 @@ export async function sendWhatsAppMessage(message: string): Promise<{ ok: boolea
     return { ok: false, error: 'FONNTE_TOKEN belum diisi di environment variable' };
   }
 
-  // Baca target dari database dulu (bisa diubah dari UI tanpa redeploy)
+  // Baca target dari database via REST API (aman untuk semua runtime)
   let targetRaw = process.env.FONNTE_TARGET || '';
   try {
-    const { createServiceClient } = await import('@/lib/supabase/service');
-    const supabase = createServiceClient();
-    const { data } = await supabase
-      .from('app_settings')
-      .select('value')
-      .eq('key', 'fonnte_target')
-      .maybeSingle();
-    if (data?.value?.trim()) {
-      targetRaw = data.value.trim();
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (supabaseUrl && serviceKey) {
+      const res = await fetch(
+        `${supabaseUrl}/rest/v1/app_settings?key=eq.fonnte_target&select=value`,
+        { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } }
+      );
+      if (res.ok) {
+        const rows = await res.json();
+        if (rows?.[0]?.value?.trim()) targetRaw = rows[0].value.trim();
+      }
     }
   } catch {
-    // Kalau DB tidak bisa diakses, tetap pakai env var
+    // fallback ke env var
   }
 
   if (!targetRaw) {
