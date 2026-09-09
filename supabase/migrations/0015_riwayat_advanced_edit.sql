@@ -3,20 +3,15 @@
 -- Jalankan SETELAH 0014_roles_and_slow_moving.sql
 -- ============================================================================
 
--- 1. HAPUS TRANSAKSI: hapus satu baris sale, kembalikan stok ke batch aslinya
 create or replace function delete_sale_transaction(p_sale_id uuid)
 returns void as $$
-declare
-  v_sale sales;
+declare v_sale sales;
 begin
   select * into v_sale from sales where id = p_sale_id;
-  if v_sale is null then
-    raise exception 'SALE_NOT_FOUND: transaksi tidak ditemukan';
-  end if;
+  if v_sale is null then raise exception 'SALE_NOT_FOUND: transaksi tidak ditemukan'; end if;
   if v_sale.batch_id is not null then
     update product_batches
-    set qty_remaining = least(qty_initial, qty_remaining + v_sale.qty),
-        status = 'active'
+    set qty_remaining = least(qty_initial, qty_remaining + v_sale.qty), status = 'active'
     where id = v_sale.batch_id;
   end if;
   delete from sales where id = p_sale_id;
@@ -26,12 +21,8 @@ $$ language plpgsql security definer;
 revoke execute on function delete_sale_transaction(uuid) from public;
 grant execute on function delete_sale_transaction(uuid) to authenticated;
 
--- 2. BULK RENAME PEMBELI: ubah nama pembeli untuk semua transaksi
---    dalam satu grup (pembeli + tanggal yang sama) sekaligus
 create or replace function rename_buyer_for_group(
-  p_old_buyer_name text,
-  p_date_key text,
-  p_new_buyer_name text
+  p_old_buyer_name text, p_date_key text, p_new_buyer_name text
 ) returns int as $$
 declare v_updated int;
 begin
@@ -47,7 +38,7 @@ $$ language plpgsql security definer;
 revoke execute on function rename_buyer_for_group(text, text, text) from public;
 grant execute on function rename_buyer_for_group(text, text, text) to authenticated;
 
--- 3. GANTI PRODUK di transaksi: pindahkan transaksi ke produk lain
+-- change_sale_product: dengan fix kasus batch_id NULL (transaksi lama)
 create or replace function change_sale_product(
   p_sale_id uuid,
   p_new_product_id uuid,
@@ -60,6 +51,7 @@ declare
   v_remaining numeric;
   v_take numeric;
   v_batch record;
+  v_fallback_batch_id uuid;
   v_new_sale sales;
   v_last_cost numeric := 0;
   v_unit_price numeric;
@@ -71,9 +63,18 @@ begin
 
   if v_sale.batch_id is not null then
     update product_batches
-    set qty_remaining = least(qty_initial, qty_remaining + v_sale.qty),
-        status = 'active'
+    set qty_remaining = least(qty_initial, qty_remaining + v_sale.qty), status = 'active'
     where id = v_sale.batch_id;
+  else
+    -- Transaksi lama tanpa batch_id: kembalikan ke batch paling baru
+    select id into v_fallback_batch_id
+    from product_batches where product_id = v_sale.product_id
+    order by received_at desc, created_at desc limit 1;
+    if v_fallback_batch_id is not null then
+      update product_batches
+      set qty_remaining = least(qty_initial, qty_remaining + v_sale.qty), status = 'active'
+      where id = v_fallback_batch_id;
+    end if;
   end if;
 
   delete from sales where id = p_sale_id;
@@ -82,8 +83,7 @@ begin
   for v_batch in
     select * from product_batches
     where product_id = p_new_product_id and status = 'active' and qty_remaining > 0
-    order by received_at asc, created_at asc
-    for update
+    order by received_at asc, created_at asc for update
   loop
     exit when v_remaining <= 0;
     v_take := least(v_remaining, v_batch.qty_remaining);
@@ -103,9 +103,7 @@ begin
   end loop;
 
   if v_remaining > 0 then
-    if not p_allow_oversell then
-      raise exception 'INSUFFICIENT_STOCK: stok produk baru tidak cukup';
-    end if;
+    if not p_allow_oversell then raise exception 'INSUFFICIENT_STOCK: stok produk baru tidak cukup'; end if;
     v_unit_price := coalesce(p_new_unit_price, v_last_cost);
     insert into sales (trx_id, product_id, batch_id, product_name_snapshot, qty,
       unit_price, unit_cost, total, buyer_name, sold_at)

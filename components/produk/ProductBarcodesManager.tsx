@@ -4,8 +4,6 @@ import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ScanLine, Plus, Trash2, Loader2, Camera, X, Check } from 'lucide-react';
 import { getProductBarcodes, addProductBarcode, deleteProductBarcode, type ProductBarcode } from '@/lib/actions/products';
-import { BrowserMultiFormatReader } from '@zxing/browser';
-import { NotFoundException } from '@zxing/library';
 
 export function ProductBarcodesManager({ productId }: { productId: string }) {
   const [barcodes, setBarcodes] = useState<ProductBarcode[]>([]);
@@ -17,11 +15,13 @@ export function ProductBarcodesManager({ productId }: { productId: string }) {
   const [scannerOpen, setScannerOpen] = useState(false);
   const [pendingScan, setPendingScan] = useState<string | null>(null);
   const [scanError, setScanError] = useState('');
+  const [scanReady, setScanReady] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const readerRef = useRef<BrowserMultiFormatReader | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const hasScannedRef = useRef(false);
+  const rafRef = useRef<number | null>(null);
+  // Lock: setelah deteksi berhasil, stop semua scanning
+  const hasDetectedRef = useRef(false);
 
   async function refresh() {
     setLoading(true);
@@ -30,38 +30,80 @@ export function ProductBarcodesManager({ productId }: { productId: string }) {
   }
 
   useEffect(() => { refresh(); }, [productId]);
-
   useEffect(() => {
     if (showForm && !scannerOpen && !pendingScan) setTimeout(() => inputRef.current?.focus(), 50);
   }, [showForm, scannerOpen, pendingScan]);
-
   useEffect(() => { return () => { stopCamera(); }; }, []);
 
   async function startCamera() {
     setScanError('');
+    // Reset semua state scan sebelumnya
     setPendingScan(null);
-    hasScannedRef.current = false;
+    hasDetectedRef.current = false;
+    setScanReady(false);
+
+    // Stop kamera lama kalau masih jalan
+    stopCamera();
+
     setScannerOpen(true);
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
+      });
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
+        setScanReady(true);
       }
-      const reader = new BrowserMultiFormatReader();
-      readerRef.current = reader;
-      reader.decodeFromVideoElement(videoRef.current!, (result, err) => {
-        if (hasScannedRef.current) return;
-        if (result) {
-          hasScannedRef.current = true;
-          stopCamera();
-          setPendingScan(result.getText());
-        }
-        if (err && !(err instanceof NotFoundException)) {
-          // abaikan error scan normal
-        }
-      });
+
+      const hasBarcodeDetector = 'BarcodeDetector' in window;
+
+      if (hasBarcodeDetector) {
+        // BarcodeDetector native — sangat cepat dan akurat
+        // @ts-ignore
+        const detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'qr_code'] });
+        const scan = async () => {
+          // Stop kalau sudah deteksi atau kamera sudah ditutup
+          if (hasDetectedRef.current || !streamRef.current || !videoRef.current) return;
+          if (videoRef.current.readyState >= 2) {
+            try {
+              const results = await detector.detect(videoRef.current);
+              if (results.length > 0 && !hasDetectedRef.current) {
+                hasDetectedRef.current = true;
+                const code = results[0].rawValue;
+                stopCamera();
+                setPendingScan(code);
+                return; // Berhenti total, tidak schedule frame berikutnya
+              }
+            } catch { /* frame belum siap */ }
+          }
+          // Schedule frame berikutnya hanya kalau belum deteksi
+          if (!hasDetectedRef.current) {
+            rafRef.current = requestAnimationFrame(scan);
+          }
+        };
+        rafRef.current = requestAnimationFrame(scan);
+      } else {
+        // Fallback ZXing untuk browser yang tidak support BarcodeDetector
+        const { BrowserMultiFormatReader } = await import('@zxing/browser');
+        const reader = new BrowserMultiFormatReader();
+
+        const scanFallback = () => {
+          if (hasDetectedRef.current || !streamRef.current || !videoRef.current) return;
+          reader.decodeFromVideoElement(videoRef.current, (result) => {
+            if (result && !hasDetectedRef.current) {
+              hasDetectedRef.current = true;
+              const code = result.getText();
+              stopCamera();
+              setPendingScan(code);
+            }
+          }).catch(() => {});
+        };
+        // ZXing: jalankan sekali, callbacks akan terus datang sampai stopCamera
+        scanFallback();
+      }
     } catch {
       setScanError('Tidak bisa akses kamera. Pastikan izin kamera sudah diberikan.');
       setScannerOpen(false);
@@ -69,21 +111,33 @@ export function ProductBarcodesManager({ productId }: { productId: string }) {
   }
 
   function stopCamera() {
-    readerRef.current = null;
+    // Stop semua RAF
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    // Stop semua track kamera
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
     setScannerOpen(false);
+    setScanReady(false);
   }
 
   function confirmScan() {
     if (pendingScan) { setNewBarcode(pendingScan); setPendingScan(null); }
   }
 
-  function retryScan() {
+  async function retryScan() {
+    // Reset semua state sebelum scan ulang
     setPendingScan(null);
-    hasScannedRef.current = false;
+    hasDetectedRef.current = false;
+    // Tunggu sebentar supaya state bersih
+    await new Promise((r) => setTimeout(r, 100));
     startCamera();
   }
 
@@ -125,16 +179,21 @@ export function ProductBarcodesManager({ productId }: { productId: string }) {
           {scannerOpen && (
             <div className="mb-2">
               <div className="relative overflow-hidden rounded-xl bg-black">
-                <video ref={videoRef} className="w-full rounded-xl" playsInline muted />
+                <video ref={videoRef} className="w-full rounded-xl" playsInline muted style={{ maxHeight: '200px', objectFit: 'cover' }} />
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                  <div className="h-14 w-52 rounded-lg border-2 border-butter-400" />
+                  <div className="h-12 w-48 rounded-lg border-2 border-butter-400" />
                 </div>
+                {!scanReady && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/70">
+                    <Loader2 size={20} className="animate-spin text-white" />
+                  </div>
+                )}
                 <button type="button" onClick={stopCamera}
-                  className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white">
-                  <X size={16} />
+                  className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white">
+                  <X size={14} />
                 </button>
               </div>
-              <p className="mt-1.5 text-center text-[11px] text-ink-soft">Arahkan ke barcode kemasan — berhenti otomatis setelah terbaca</p>
+              <p className="mt-1 text-center text-[11px] text-ink-soft">Arahkan ke barcode — berhenti otomatis setelah terbaca</p>
             </div>
           )}
 
