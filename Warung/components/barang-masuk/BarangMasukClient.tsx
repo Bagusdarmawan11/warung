@@ -1,0 +1,323 @@
+'use client';
+
+import { useRef, useState } from 'react';
+import { toast } from 'sonner';
+import { PackagePlus, Download, Plus, Search, ImagePlus, X, Camera } from 'lucide-react';
+import { Button, Card, Field, Input, Select, ToggleGroup } from '@/components/ui';
+import { BarcodeCanvas, downloadBarcodeAsPng } from '@/components/BarcodeCanvas';
+import { createProduct, addBatch } from '@/lib/actions/products';
+import { getProductSummaries } from '@/lib/actions/products';
+import { uploadProductImage } from '@/lib/uploadImage';
+import { rupiah, todayISO, formatQty, combineDateWithNowTime, pricePerGramFromPerKg, pricePerKgFromPerGram } from '@/lib/format';
+import type { Product, ProductStockSummary, UnitType } from '@/lib/types';
+
+export function BarangMasukClient() {
+  const [mode, setMode] = useState<'baru' | 'restock'>('baru');
+
+  return (
+    <div className="animate-slide-up">
+      <div className="mb-4">
+        <h1 className="font-display text-2xl font-extrabold text-ink">Barang Masuk</h1>
+        <p className="text-sm text-ink-soft">Tambah produk baru atau tambah stok produk lama</p>
+      </div>
+      <div className="mb-5">
+        <ToggleGroup
+          value={mode}
+          onChange={(v) => setMode(v as any)}
+          options={[
+            { value: 'baru', label: 'Produk Baru' },
+            { value: 'restock', label: 'Tambah Stok' },
+          ]}
+        />
+      </div>
+      {mode === 'baru' ? <ProdukBaruForm /> : <RestockForm />}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// PRODUK BARU
+// ---------------------------------------------------------------------------
+function ProdukBaruForm() {
+  const [unitType, setUnitType] = useState<UnitType>('pcs');
+  const [saving, setSaving] = useState(false);
+  const [created, setCreated] = useState<Product | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  function handlePickImage(file: File | null) {
+    setImageFile(file);
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImagePreview(file ? URL.createObjectURL(file) : null);
+  }
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const name = String(fd.get('name') || '').trim();
+    const qty = parseFloat(String(fd.get('qty') || '0'));
+    const buyPriceInput = parseFloat(String(fd.get('buyPrice') || '0'));
+    const sellPriceInput = parseFloat(String(fd.get('sellPrice') || '0'));
+    if (!name || !qty || qty <= 0) { toast.error('Lengkapi nama & jumlah barang'); return; }
+
+    // Untuk produk timbangan (gram), admin mengisi harga per KILOGRAM (lebih
+    // wajar buat manusia), tapi database menyimpan harga per-gram (biar
+    // matematika stok konsisten) - dikonversi di sini.
+    const buyPrice = unitType === 'gram' ? pricePerGramFromPerKg(buyPriceInput) : buyPriceInput;
+    const sellPrice = unitType === 'gram' ? pricePerGramFromPerKg(sellPriceInput) : sellPriceInput;
+
+    setSaving(true);
+    const res = await createProduct({
+      name,
+      category: String(fd.get('category') || ''),
+      unitType,
+      lowStockThreshold: parseFloat(String(fd.get('threshold') || '3')) || 3,
+      qty,
+      buyPrice,
+      sellPrice,
+      expiryDate: String(fd.get('expiryDate') || '') || null,
+      receivedAt: combineDateWithNowTime(String(fd.get('receivedAt') || '') || todayISO()),
+    });
+    setSaving(false);
+
+    if (!res.ok) { toast.error(res.error); return; }
+    let product = res.data;
+    toast.success('Produk baru ditambahkan: ' + product.code);
+
+    // Upload foto (opsional) - kalau gagal, produk tetap tersimpan, cuma kasih peringatan
+    if (imageFile) {
+      setUploadingImage(true);
+      const uploadRes = await uploadProductImage(imageFile, product.id);
+      setUploadingImage(false);
+      if (uploadRes.url) {
+        product = { ...product, image_url: uploadRes.url };
+      } else if (uploadRes.error) {
+        toast.error(uploadRes.error);
+      }
+    }
+    setCreated(product);
+  }
+
+  if (created) {
+    return (
+      <Card className="mx-auto max-w-sm text-center">
+        <span className="mb-3 inline-flex items-center gap-1 rounded-full bg-mint-100 px-3 py-1 text-xs font-bold text-mint-600">
+          Produk tersimpan
+        </span>
+        {created.image_url && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={created.image_url} alt={created.name} className="mx-auto mb-3 h-24 w-24 rounded-2xl object-cover" />
+        )}
+        <h3 className="font-display text-xl font-bold text-ink">{created.name}</h3>
+        <p className="mb-4 text-sm text-ink-soft">
+          Kode <span className="font-mono font-bold text-ink">{created.code}</span>
+        </p>
+        <div className="mx-auto max-w-[180px] rounded-2xl border-2 border-dashed border-lilac-200 bg-white p-3">
+          <BarcodeCanvas code={created.code} />
+        </div>
+        <div className="mt-4 flex justify-center">
+          <Button variant="dark" size="sm" onClick={() => downloadBarcodeAsPng(created.code)}>
+            <Download size={14} /> Unduh Barcode
+          </Button>
+        </div>
+        <Button full className="mt-4" onClick={() => { setCreated(null); handlePickImage(null); }}>
+          <Plus size={16} /> Tambah Produk Lain
+        </Button>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
+        <div className="mb-3.5 sm:col-span-2">
+          <label className="mb-1.5 block text-xs font-bold text-ink-soft">Foto Produk (opsional)</label>
+          <div className="flex items-start gap-3">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="relative flex h-20 w-20 flex-none items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-lilac-200 bg-lilac-50/50 text-ink-soft hover:border-peach-300"
+            >
+              {imagePreview ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={imagePreview} alt="Pratinjau" className="h-full w-full object-cover" />
+              ) : (
+                <ImagePlus size={22} />
+              )}
+            </button>
+            <div className="flex flex-col gap-1.5 pt-1">
+              <button type="button" onClick={() => cameraInputRef.current?.click()}
+                className="flex items-center gap-1.5 rounded-lg bg-butter-100 px-3 py-1.5 text-[11px] font-bold text-ink">
+                <Camera size={13} /> Kamera
+              </button>
+              <button type="button" onClick={() => fileInputRef.current?.click()}
+                className="flex items-center gap-1.5 rounded-lg bg-lilac-100 px-3 py-1.5 text-[11px] font-bold text-ink">
+                <ImagePlus size={13} /> Galeri
+              </button>
+              {imagePreview && (
+                <button type="button" onClick={() => handlePickImage(null)}
+                  className="flex items-center gap-1 text-[11px] font-semibold text-rose-500">
+                  <X size={12} /> Hapus
+                </button>
+              )}
+            </div>
+            <input ref={fileInputRef} type="file" accept="image/*" className="hidden"
+              onChange={(e) => handlePickImage(e.target.files?.[0] || null)} />
+            <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden"
+              onChange={(e) => handlePickImage(e.target.files?.[0] || null)} />
+          </div>
+        </div>
+        <Field label="Nama Barang *" full>
+          <Input name="name" required placeholder="Cth: Indomie Goreng" />
+        </Field>
+        <Field label="Jenis Satuan *">
+          <Select value={unitType} onChange={(e) => setUnitType(e.target.value as UnitType)}>
+            <option value="pcs">Satuan / Pack (pcs)</option>
+            <option value="gram">Timbangan (gram)</option>
+          </Select>
+        </Field>
+        <Field label="Kategori (opsional)">
+          <Input name="category" placeholder="Cth: Sembako, Bumbu, Minuman" />
+        </Field>
+        <Field label={unitType === 'gram' ? 'Berat Masuk (gram) *' : 'Qty Masuk *'}>
+          <Input name="qty" type="number" step="any" min={0} required placeholder={unitType === 'gram' ? 'Cth: 500' : 'Cth: 12'} />
+        </Field>
+        <Field label="Batas Stok Menipis" hint="Peringatan muncul kalau stok ≤ angka ini">
+          <Input name="threshold" type="number" defaultValue={unitType === 'gram' ? 100 : 3} />
+        </Field>
+        <Field label={unitType === 'gram' ? 'Harga Modal /kg *' : 'Harga Modal (beli) *'} hint={unitType === 'gram' ? 'Harga beli per KILOGRAM, bukan per gram' : undefined}>
+          <Input name="buyPrice" type="number" step="any" min={0} required placeholder="0" />
+        </Field>
+        <Field label={unitType === 'gram' ? 'Harga Jual /kg *' : 'Harga Jual *'} hint={unitType === 'gram' ? 'Harga jual per KILOGRAM, bukan per gram' : undefined}>
+          <Input name="sellPrice" type="number" step="any" min={0} required placeholder="0" />
+        </Field>
+        <Field label="Tanggal Barang Masuk" hint="Bisa diubah kalau input untuk hari sebelumnya">
+          <Input name="receivedAt" type="date" max={todayISO()} defaultValue={todayISO()} />
+        </Field>
+        <Field label="Tanggal Kadaluwarsa">
+          <Input name="expiryDate" type="date" />
+        </Field>
+        <div className="sm:col-span-2">
+          <Button type="submit" full disabled={saving || uploadingImage}>
+            <PackagePlus size={17} /> {saving ? 'Menyimpan...' : uploadingImage ? 'Mengunggah foto...' : 'Simpan & Buat Kode Barcode'}
+          </Button>
+        </div>
+      </form>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// RESTOCK (TAMBAH STOK)
+// ---------------------------------------------------------------------------
+function RestockForm() {
+  const [search, setSearch] = useState('');
+  const [results, setResults] = useState<ProductStockSummary[]>([]);
+  const [picked, setPicked] = useState<ProductStockSummary | null>(null);
+  const [saving, setSaving] = useState(false);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function handleSearchChange(v: string) {
+    setSearch(v);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    if (v.trim().length < 2) { setResults([]); return; }
+    searchTimer.current = setTimeout(async () => {
+      const r = await getProductSummaries({ search: v.trim() });
+      setResults(r.slice(0, 8));
+    }, 200);
+  }
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!picked) return;
+    const fd = new FormData(e.currentTarget);
+    const qty = parseFloat(String(fd.get('qty') || '0'));
+    if (!qty || qty <= 0) { toast.error('Isi jumlah tambahan stok'); return; }
+
+    const isGram = picked.unit_type === 'gram';
+    const buyPriceInput = fd.get('buyPrice') ? parseFloat(String(fd.get('buyPrice'))) : null;
+    const sellPriceInput = fd.get('sellPrice') ? parseFloat(String(fd.get('sellPrice'))) : null;
+    const buyPrice = buyPriceInput != null ? (isGram ? pricePerGramFromPerKg(buyPriceInput) : buyPriceInput) : (picked.harga_modal_aktif || 0);
+    const sellPrice = sellPriceInput != null ? (isGram ? pricePerGramFromPerKg(sellPriceInput) : sellPriceInput) : (picked.harga_jual_aktif || 0);
+
+    setSaving(true);
+    const res = await addBatch({
+      productId: picked.product_id,
+      qty,
+      buyPrice,
+      sellPrice,
+      expiryDate: String(fd.get('expiryDate') || '') || null,
+      receivedAt: combineDateWithNowTime(String(fd.get('receivedAt') || '') || todayISO()),
+    });
+    setSaving(false);
+    if (!res.ok) { toast.error(res.error); return; }
+    toast.success('Stok berhasil ditambahkan');
+    setPicked(null);
+    setSearch('');
+    setResults([]);
+  }
+
+  return (
+    <div>
+      <Card className="mb-4">
+        <Field label="Cari produk (nama atau kode)">
+          <div className="relative">
+            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-soft" />
+            <Input className="pl-9" value={search} onChange={(e) => handleSearchChange(e.target.value)} placeholder="Ketik nama produk..." />
+          </div>
+        </Field>
+        {results.length > 0 && (
+          <div className="overflow-hidden rounded-xl border border-lilac-100">
+            {results.map((p) => (
+              <button
+                key={p.product_id}
+                onClick={() => { setPicked(p); setResults([]); setSearch(p.name); }}
+                className="flex w-full flex-col items-start gap-0.5 border-t border-lilac-100 px-3 py-2.5 text-left text-sm first:border-t-0 hover:bg-lilac-50"
+              >
+                <span className="font-medium leading-snug text-ink">{p.name}</span>
+                <span className="font-mono text-[11px] text-ink-soft">{p.code} &middot; stok {formatQty(p.stok, p.unit_type)}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {picked && (
+        <Card>
+          <div className="mb-4 rounded-xl bg-lilac-50 p-3">
+            <p className="font-bold text-ink">{picked.name}</p>
+            <p className="font-mono text-xs text-ink-soft">
+              {picked.code} &middot; stok sekarang: {formatQty(picked.stok, picked.unit_type)} &middot;{' '}
+              {picked.unit_type === 'gram' ? `${rupiah(pricePerKgFromPerGram(picked.harga_jual_aktif || 0))}/kg` : rupiah(picked.harga_jual_aktif)}
+            </p>
+          </div>
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
+            <Field label={picked.unit_type === 'gram' ? 'Berat Tambahan (gram) *' : 'Qty Tambahan *'}>
+              <Input name="qty" type="number" step="any" min={0} required placeholder="0" />
+            </Field>
+            <Field label="Tanggal Restock" hint="Bisa diubah kalau input untuk hari sebelumnya">
+              <Input name="receivedAt" type="date" max={todayISO()} defaultValue={todayISO()} />
+            </Field>
+            <Field label="Tanggal Kadaluwarsa Baru">
+              <Input name="expiryDate" type="date" />
+            </Field>
+            <Field label={picked.unit_type === 'gram' ? 'Harga Modal Baru /kg (opsional)' : 'Harga Modal Baru (opsional)'}>
+              <Input name="buyPrice" type="number" step="any" min={0} placeholder={String(picked.unit_type === 'gram' ? pricePerKgFromPerGram(picked.harga_modal_aktif || 0) : (picked.harga_modal_aktif || 0))} />
+            </Field>
+            <Field label={picked.unit_type === 'gram' ? 'Harga Jual Baru /kg (opsional)' : 'Harga Jual Baru (opsional)'}>
+              <Input name="sellPrice" type="number" step="any" min={0} placeholder={String(picked.unit_type === 'gram' ? pricePerKgFromPerGram(picked.harga_jual_aktif || 0) : (picked.harga_jual_aktif || 0))} />
+            </Field>
+            <div className="sm:col-span-2">
+              <Button type="submit" full disabled={saving}>
+                <PackagePlus size={17} /> {saving ? 'Menyimpan...' : 'Tambah Stok'}
+              </Button>
+            </div>
+          </form>
+        </Card>
+      )}
+    </div>
+  );
+}
