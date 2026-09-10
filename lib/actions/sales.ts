@@ -163,3 +163,22 @@ export async function changeSaleProduct(
   revalidateAll();
   return { ok: true };
 }
+
+/** Ubah tanggal untuk SEMUA transaksi dalam satu grup (pembeli + tanggal yang sama). */
+export async function rescheduleGroupDate(
+  buyerName: string,
+  oldDateKey: string,
+  newDateKey: string
+): Promise<{ ok: boolean; count?: number; error?: string }> {
+  const supabase = await createClient();
+  // Buat timestamp baru dengan jam 12:00 WIB supaya tidak ada date shift
+  const newTimestamp = `${newDateKey}T12:00:00+07:00`;
+  const { data, error } = await supabase.rpc('reschedule_buyer_group', {
+    p_old_buyer_name: buyerName,
+    p_old_date_key: oldDateKey,
+    p_new_date: newTimestamp,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidateAll();
+  return { ok: true, count: data as number };
+}

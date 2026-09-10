@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { Search, Download, History, FileText, ChevronLeft, ChevronRight, Users, Receipt, Edit2, Save, Trash2, RefreshCw, X, Package } from 'lucide-react';
 import { Card, Input, ToggleGroup, EmptyState, Field, Button } from '@/components/ui';
 import { Modal, ConfirmDialog } from '@/components/Modal';
-import { getSalesHistory, getStockInHistory, getProductStockById, updateSaleTransaction, deleteSaleTransaction, renameBuyerForGroup, changeSaleProduct } from '@/lib/actions/sales';
+import { getSalesHistory, getStockInHistory, getProductStockById, updateSaleTransaction, deleteSaleTransaction, renameBuyerForGroup, changeSaleProduct, rescheduleGroupDate } from '@/lib/actions/sales';
 import { getProductSummaries, deleteProductBatch } from '@/lib/actions/products';
 import { downloadCsv } from '@/lib/csv';
 import { exportSalesToPdf } from '@/lib/pdf';
@@ -363,12 +363,17 @@ function BuyerDayModal({ group, onClose, onSelectItem, onGroupRenamed }: {
   onSelectItem: (s: SaleRow) => void;
   onGroupRenamed: () => void;
 }) {
-  const [editingName, setEditingName] = useState(false);
+  const [mode, setMode] = useState<'view' | 'editName' | 'editDate'>('view');
   const [newName, setNewName] = useState('');
+  const [newDate, setNewDate] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (group) { setEditingName(false); setNewName(group.buyerName === 'Tanpa Nama Pembeli' ? '' : group.buyerName); }
+    if (group) {
+      setMode('view');
+      setNewName(group.buyerName === 'Tanpa Nama Pembeli' ? '' : group.buyerName);
+      setNewDate(group.dateKey);
+    }
   }, [group]);
 
   if (!group) return null;
@@ -381,34 +386,63 @@ function BuyerDayModal({ group, onClose, onSelectItem, onGroupRenamed }: {
     setSaving(false);
     if (!res.ok) { toast.error(res.error); return; }
     toast.success(`${res.count} transaksi berhasil diganti namanya`);
-    setEditingName(false);
-    onGroupRenamed();
-    onClose();
+    setMode('view'); onGroupRenamed(); onClose();
+  }
+
+  async function handleReschedule() {
+    if (!newDate) { toast.error('Pilih tanggal baru'); return; }
+    if (newDate === group!.dateKey) { toast.error('Tanggal sama dengan sebelumnya'); return; }
+    setSaving(true);
+    const oldName = group!.buyerName === 'Tanpa Nama Pembeli' ? '' : group!.buyerName;
+    const res = await rescheduleGroupDate(oldName, group!.dateKey, newDate);
+    setSaving(false);
+    if (!res.ok) { toast.error(res.error); return; }
+    toast.success(`${res.count} transaksi dipindah ke ${newDate}`);
+    setMode('view'); onGroupRenamed(); onClose();
   }
 
   return (
     <Modal open={!!group} onClose={onClose} title={group.buyerName}>
-      {editingName ? (
+      {mode === 'editName' && (
         <div className="mb-4">
-          <p className="mb-2 text-[11px] text-ink-soft">Nama baru akan diterapkan ke semua {group.items.length} transaksi orang ini pada tanggal {formatTanggal(group.dateKey)}.</p>
+          <p className="mb-2 text-[11px] text-ink-soft">Nama baru diterapkan ke semua {group.items.length} transaksi tanggal {formatTanggal(group.dateKey)}.</p>
           <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Nama pembeli baru..." autoFocus />
           <div className="mt-2 flex gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setEditingName(false)} disabled={saving}>Batal</Button>
+            <Button variant="ghost" size="sm" onClick={() => setMode('view')} disabled={saving}>Batal</Button>
             <Button size="sm" onClick={handleRename} disabled={saving} full>
               <Save size={14} /> {saving ? 'Menyimpan...' : 'Simpan Nama'}
             </Button>
           </div>
         </div>
-      ) : (
-        <div className="mb-4 flex items-start justify-between gap-2">
-          <p className="text-xs text-ink-soft">{formatTanggal(group.dateKey)} &middot; {group.items.length} produk &middot; total <span className="font-bold text-ink">{rupiah(group.totalOmzet)}</span></p>
-          <button onClick={() => setEditingName(true)}
-            className="flex flex-none items-center gap-1 rounded-lg bg-lilac-100 px-2.5 py-1 text-[11px] font-bold text-ink">
-            <Edit2 size={12} /> Edit Nama
-          </button>
+      )}
+      {mode === 'editDate' && (
+        <div className="mb-4">
+          <p className="mb-2 text-[11px] text-ink-soft">Pindahkan semua <strong>{group.items.length} transaksi</strong> dari <strong>{formatTanggal(group.dateKey)}</strong> ke tanggal baru:</p>
+          <div className="mb-2 rounded-xl bg-butter-50 p-3 text-[11px] text-ink-soft">
+            ⚠️ Semua produk yang dibeli {group.buyerName} pada {formatTanggal(group.dateKey)} akan dipindah sekaligus.
+          </div>
+          <Input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} max={new Date().toISOString().slice(0, 10)} />
+          <div className="mt-2 flex gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setMode('view')} disabled={saving}>Batal</Button>
+            <Button size="sm" onClick={handleReschedule} disabled={saving} full>
+              <Save size={14} /> {saving ? 'Memindahkan...' : 'Pindah Tanggal'}
+            </Button>
+          </div>
         </div>
       )}
-
+      {mode === 'view' && (
+        <div className="mb-4">
+          <p className="mb-2 text-xs text-ink-soft">{formatTanggal(group.dateKey)} &middot; {group.items.length} produk &middot; total <span className="font-bold text-ink">{rupiah(group.totalOmzet)}</span></p>
+          <div className="flex gap-2">
+            <button onClick={() => setMode('editName')} className="flex flex-1 items-center justify-center gap-1 rounded-xl bg-lilac-100 py-2 text-[11px] font-bold text-ink">
+              <Edit2 size={12} /> Edit Nama
+            </button>
+            <button onClick={() => setMode('editDate')} className="flex flex-1 items-center justify-center gap-1 rounded-xl bg-butter-100 py-2 text-[11px] font-bold text-ink">
+              <Save size={12} /> Edit Tanggal
+            </button>
+          </div>
+        </div>
+      )}
       <div className="space-y-2">
         {group.items.slice().sort((a, b) => b.sold_at.localeCompare(a.sold_at)).map((s) => (
           <button key={s.id} onClick={() => onSelectItem(s)} className="block w-full text-left">
@@ -426,6 +460,7 @@ function BuyerDayModal({ group, onClose, onSelectItem, onGroupRenamed }: {
     </Modal>
   );
 }
+
 
 function SaleDetailModal({ sale, onClose, onUpdated, onDeleted }: {
   sale: SaleRow | null;

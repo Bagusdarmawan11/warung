@@ -146,3 +146,25 @@ $$ language plpgsql security definer;
 
 revoke execute on function delete_product_batch(uuid) from public;
 grant execute on function delete_product_batch(uuid) to authenticated;
+
+-- 5. EDIT TANGGAL MASSAL: ubah tanggal untuk semua transaksi
+--    dalam satu grup (pembeli + tanggal yang sama) sekaligus
+create or replace function reschedule_buyer_group(
+  p_old_buyer_name text,
+  p_old_date_key text,       -- format YYYY-MM-DD
+  p_new_date timestamptz
+) returns int as $$
+declare
+  v_updated int;
+begin
+  update sales
+  set sold_at = p_new_date
+  where (buyer_name = p_old_buyer_name or (p_old_buyer_name = '' and buyer_name is null))
+    and sold_at::date = p_old_date_key::date;
+  get diagnostics v_updated = row_count;
+  return v_updated;
+end;
+$$ language plpgsql security definer;
+
+revoke execute on function reschedule_buyer_group(text, text, timestamptz) from public;
+grant execute on function reschedule_buyer_group(text, text, timestamptz) to authenticated;

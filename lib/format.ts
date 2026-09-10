@@ -82,8 +82,16 @@ export function pricePerGramFromPerKg(pricePerKg: number): number {
  * berada di zona waktu WIB/WITA/WIT).
  */
 export function combineDateWithNowTime(dateStr: string): string {
+  // Buat timestamp dengan timezone WIB (+07:00) eksplisit
+  // supaya tidak terjadi date-shift saat dikonversi ke UTC
   const [y, m, d] = dateStr.split('-').map(Number);
   const now = new Date();
-  const combined = new Date(y, (m || 1) - 1, d || 1, now.getHours(), now.getMinutes(), now.getSeconds());
-  return combined.toISOString();
+  // Waktu lokal WIB: ambil jam sekarang dalam WIB
+  const wibNow = new Date(now.getTime() + 7 * 3600 * 1000);
+  const hh = wibNow.getUTCHours();
+  const mm = wibNow.getUTCMinutes();
+  const ss = wibNow.getUTCSeconds();
+  // Format: YYYY-MM-DDTHH:mm:ss+07:00 (eksplisit WIB)
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${y}-${pad(m)}-${pad(d)}T${pad(hh)}:${pad(mm)}:${pad(ss)}+07:00`;
 }
